@@ -1,0 +1,366 @@
+[
+  {
+    "id": "auc_dose_response",
+    "description": "Scatter plot with polynomial fit curve. Diamond markers, R2=0.9713.",
+    "image_filename": "example_auc.png",
+    "ground_truth": {
+      "figure_info": {
+        "title": null,
+        "x_axis": {"label": "Dose", "unit": "mg/kg", "min": 0, "max": 300, "scale": "linear"},
+        "y_axis": {"label": "AUC0-20h", "unit": "mg x h/L", "min": 0, "max": 80, "scale": "linear"},
+        "r_squared": 0.9713,
+        "fit_type": "polynomial",
+        "chart_type": "scatter_with_fit"
+      },
+      "series": [
+        {
+          "name": "Data points",
+          "marker": "diamond",
+          "color": "black",
+          "line_style": "none",
+          "data_points": [
+            {"x": 18, "y": 1.0}, {"x": 18, "y": 1.5},
+            {"x": 63, "y": 1.5}, {"x": 63, "y": 3.5}, {"x": 63, "y": 12},
+            {"x": 250, "y": 56}, {"x": 250, "y": 69}
+          ],
+          "error_bars": []
+        }
+      ],
+      "fit_curves": [
+        {
+          "name": "Polynomial fit (R2=0.9713)",
+          "color": "black",
+          "line_style": "solid",
+          "points": [
+            {"x": 0, "y": -1.0}, {"x": 15, "y": 0.5}, {"x": 30, "y": 2.5},
+            {"x": 45, "y": 4.8}, {"x": 60, "y": 7.5}, {"x": 75, "y": 10.5},
+            {"x": 90, "y": 14.0}, {"x": 105, "y": 17.8}, {"x": 120, "y": 22.0},
+            {"x": 135, "y": 26.5}, {"x": 150, "y": 31.5}, {"x": 165, "y": 36.8},
+            {"x": 180, "y": 42.5}, {"x": 195, "y": 48.5}, {"x": 210, "y": 55.0},
+            {"x": 225, "y": 57.0}, {"x": 240, "y": 59.5}, {"x": 255, "y": 62.5},
+            {"x": 270, "y": 66.0}, {"x": 285, "y": 70.0}, {"x": 300, "y": 74.5}
+          ]
+        }
+      ]
+    },
+    "extraction_notes": "7 diamond markers. Two at x=18, three at x=63, two at x=250. Polynomial fit curve present. chart_type is scatter_with_fit."
+  },
+  {
+    "id": "plasma_pq_concentration",
+    "description": "Multi-series line plot with error bars. 3 groups connected by lines.",
+    "image_filename": "example_plasma_pq.png",
+    "ground_truth": {
+      "figure_info": {
+        "title": null,
+        "x_axis": {"label": "t", "unit": "min", "min": 0, "max": 600, "scale": "linear"},
+        "y_axis": {"label": "plasma-PQ Conc.", "unit": "ug/mL", "min": 0, "max": 8, "scale": "linear"},
+        "r_squared": null,
+        "fit_type": null,
+        "chart_type": "line"
+      },
+      "series": [
+        {
+          "name": "Intoxication group",
+          "marker": "square",
+          "color": "black",
+          "line_style": "solid",
+          "data_points": [
+            {"x": 0, "y": 0}, {"x": 15, "y": 3.5}, {"x": 30, "y": 5.2},
+            {"x": 45, "y": 7.0}, {"x": 60, "y": 6.8}, {"x": 90, "y": 6.5},
+            {"x": 120, "y": 5.2}, {"x": 180, "y": 3.5}, {"x": 240, "y": 2.5},
+            {"x": 300, "y": 2.5}, {"x": 360, "y": 1.6}, {"x": 480, "y": 1.5},
+            {"x": 600, "y": 1.2}
+          ],
+          "error_bars": [
+            {"x": 15, "y_low": 2.0, "y_high": 5.0}, {"x": 30, "y_low": 3.5, "y_high": 6.8},
+            {"x": 45, "y_low": 5.5, "y_high": 8.5}, {"x": 60, "y_low": 5.0, "y_high": 8.5},
+            {"x": 90, "y_low": 4.8, "y_high": 8.0}, {"x": 120, "y_low": 3.5, "y_high": 7.0},
+            {"x": 180, "y_low": 2.0, "y_high": 5.0}, {"x": 240, "y_low": 1.2, "y_high": 3.8},
+            {"x": 300, "y_low": 1.2, "y_high": 3.8}, {"x": 360, "y_low": 0.8, "y_high": 2.5},
+            {"x": 480, "y_low": 0.8, "y_high": 2.2}, {"x": 600, "y_low": 0.5, "y_high": 1.8}
+          ]
+        },
+        {
+          "name": "Treatment group",
+          "marker": "circle",
+          "color": "red",
+          "line_style": "solid",
+          "data_points": [
+            {"x": 0, "y": 0}, {"x": 15, "y": 2.2}, {"x": 30, "y": 5.0},
+            {"x": 45, "y": 5.5}, {"x": 60, "y": 5.0}, {"x": 90, "y": 3.5},
+            {"x": 120, "y": 3.3}, {"x": 180, "y": 2.0}, {"x": 240, "y": 1.5},
+            {"x": 300, "y": 1.0}, {"x": 360, "y": 0.8}, {"x": 480, "y": 0.6},
+            {"x": 600, "y": 0.6}
+          ],
+          "error_bars": [
+            {"x": 15, "y_low": 1.0, "y_high": 3.5}, {"x": 30, "y_low": 3.5, "y_high": 6.5},
+            {"x": 45, "y_low": 4.0, "y_high": 7.0}, {"x": 60, "y_low": 3.5, "y_high": 6.5},
+            {"x": 90, "y_low": 2.0, "y_high": 5.0}, {"x": 120, "y_low": 2.0, "y_high": 4.5},
+            {"x": 180, "y_low": 1.0, "y_high": 3.0}, {"x": 240, "y_low": 0.5, "y_high": 2.5},
+            {"x": 300, "y_low": 0.3, "y_high": 1.8}, {"x": 360, "y_low": 0.3, "y_high": 1.3},
+            {"x": 480, "y_low": 0.2, "y_high": 1.0}, {"x": 600, "y_low": 0.2, "y_high": 1.0}
+          ]
+        },
+        {
+          "name": "Inclusion complex group",
+          "marker": "triangle",
+          "color": "blue",
+          "line_style": "solid",
+          "data_points": [
+            {"x": 0, "y": 0}, {"x": 15, "y": 2.5}, {"x": 30, "y": 2.6},
+            {"x": 45, "y": 2.5}, {"x": 60, "y": 2.5}, {"x": 90, "y": 2.0},
+            {"x": 120, "y": 1.5}, {"x": 180, "y": 1.3}, {"x": 240, "y": 1.0},
+            {"x": 300, "y": 0.8}, {"x": 360, "y": 0.5}, {"x": 480, "y": 0.5},
+            {"x": 600, "y": 0.4}
+          ],
+          "error_bars": [
+            {"x": 15, "y_low": 1.5, "y_high": 3.5}, {"x": 30, "y_low": 1.5, "y_high": 3.8},
+            {"x": 45, "y_low": 1.5, "y_high": 3.5}, {"x": 60, "y_low": 1.5, "y_high": 3.5},
+            {"x": 90, "y_low": 1.0, "y_high": 3.0}, {"x": 120, "y_low": 0.8, "y_high": 2.2},
+            {"x": 180, "y_low": 0.5, "y_high": 2.0}, {"x": 240, "y_low": 0.3, "y_high": 1.7},
+            {"x": 300, "y_low": 0.2, "y_high": 1.3}, {"x": 360, "y_low": 0.1, "y_high": 0.9},
+            {"x": 480, "y_low": 0.1, "y_high": 0.9}, {"x": 600, "y_low": 0.1, "y_high": 0.7}
+          ]
+        }
+      ],
+      "fit_curves": []
+    },
+    "extraction_notes": "3 series, 13 points each. Lines connect points. chart_type is line."
+  },
+  {
+    "id": "dual_axis_1um_500nm",
+    "description": "Dual Y-axis scatter with linear fit lines. 1uM black circles, 500nM gray triangles.",
+    "image_filename": "example_dual_axis.png",
+    "ground_truth": {
+      "figure_info": {
+        "title": null,
+        "x_axis": {"label": "", "unit": null, "min": 0, "max": 150, "scale": "linear"},
+        "y_axis": {"label": "", "unit": null, "min": 0, "max": 0.3, "scale": "linear"},
+        "r_squared": null,
+        "fit_type": "linear",
+        "chart_type": "scatter_with_fit"
+      },
+      "series": [
+        {
+          "name": "1uM",
+          "marker": "circle",
+          "color": "black",
+          "line_style": "none",
+          "data_points": [
+            {"x": 0, "y": 0.27}, {"x": 0, "y": 0.225},
+            {"x": 10, "y": 0.23}, {"x": 30, "y": 0.19},
+            {"x": 60, "y": 0.17}, {"x": 120, "y": 0.15}, {"x": 120, "y": 0.13}
+          ],
+          "error_bars": []
+        },
+        {
+          "name": "500nM",
+          "marker": "triangle",
+          "color": "gray",
+          "line_style": "none",
+          "data_points": [
+            {"x": 0, "y": 0.105}, {"x": 0, "y": 0.095},
+            {"x": 10, "y": 0.085}, {"x": 30, "y": 0.085},
+            {"x": 60, "y": 0.075}, {"x": 60, "y": 0.07}, {"x": 120, "y": 0.06}
+          ],
+          "error_bars": []
+        }
+      ],
+      "fit_curves": [
+        {
+          "name": "1uM linear fit",
+          "color": "black",
+          "line_style": "solid",
+          "points": [{"x": 0, "y": 0.235}, {"x": 150, "y": 0.12}]
+        },
+        {
+          "name": "500nM linear fit",
+          "color": "gray",
+          "line_style": "solid",
+          "points": [{"x": 0, "y": 0.098}, {"x": 150, "y": 0.055}]
+        }
+      ]
+    },
+    "extraction_notes": "14 markers total. Linear fit lines for both series. chart_type is scatter_with_fit."
+  },
+  {
+    "id": "lindane_blood_concentration",
+    "description": "PK curve: Lindane blood conc vs time. Single series with error bars and model fit.",
+    "image_filename": "example_lindane.png",
+    "ground_truth": {
+      "figure_info": {
+        "title": null,
+        "x_axis": {"label": "Time", "unit": "days", "min": 0, "max": 8, "scale": "linear"},
+        "y_axis": {"label": "Lindane Blood Concentration", "unit": "microg/g", "min": 0, "max": 2.5, "scale": "linear"},
+        "r_squared": null,
+        "fit_type": "pharmacokinetic model",
+        "chart_type": "scatter_with_fit"
+      },
+      "series": [
+        {
+          "name": "Lindane concentration",
+          "marker": "diamond",
+          "color": "black",
+          "line_style": "none",
+          "data_points": [
+            {"x": 0.25, "y": 1.0}, {"x": 0.5, "y": 1.95}, {"x": 0.5, "y": 1.5},
+            {"x": 0.75, "y": 1.9}, {"x": 1.0, "y": 1.85}, {"x": 1.0, "y": 1.6},
+            {"x": 1.25, "y": 1.3}, {"x": 1.5, "y": 1.2},
+            {"x": 2.0, "y": 0.8}, {"x": 2.0, "y": 0.65},
+            {"x": 3.0, "y": 0.4}, {"x": 4.0, "y": 0.15},
+            {"x": 7.0, "y": 0.05}, {"x": 7.0, "y": 0.02}
+          ],
+          "error_bars": [
+            {"x": 0.25, "y_low": 0.6, "y_high": 1.4},
+            {"x": 0.5, "y_low": 1.4, "y_high": 2.5},
+            {"x": 0.75, "y_low": 1.5, "y_high": 2.3},
+            {"x": 1.0, "y_low": 1.2, "y_high": 2.3},
+            {"x": 1.25, "y_low": 0.8, "y_high": 1.8},
+            {"x": 1.5, "y_low": 0.7, "y_high": 1.7},
+            {"x": 2.0, "y_low": 0.3, "y_high": 1.2},
+            {"x": 3.0, "y_low": 0.1, "y_high": 0.7},
+            {"x": 4.0, "y_low": 0.0, "y_high": 0.4},
+            {"x": 7.0, "y_low": 0.0, "y_high": 0.1}
+          ]
+        }
+      ],
+      "fit_curves": [
+        {
+          "name": "PK model fit",
+          "color": "black",
+          "line_style": "solid",
+          "points": [
+            {"x": 0, "y": 0}, {"x": 0.25, "y": 1.2}, {"x": 0.5, "y": 1.85},
+            {"x": 0.75, "y": 2.0}, {"x": 1.0, "y": 1.85}, {"x": 1.25, "y": 1.6},
+            {"x": 1.5, "y": 1.35}, {"x": 2.0, "y": 0.9}, {"x": 2.5, "y": 0.6},
+            {"x": 3.0, "y": 0.4}, {"x": 3.5, "y": 0.25}, {"x": 4.0, "y": 0.15},
+            {"x": 5.0, "y": 0.06}, {"x": 6.0, "y": 0.03}, {"x": 7.0, "y": 0.01},
+            {"x": 8.0, "y": 0.005}
+          ]
+        }
+      ]
+    },
+    "extraction_notes": "~14 data points. PK model fit curve. chart_type is scatter_with_fit."
+  },
+  {
+    "id": "saturation_curves",
+    "description": "Two saturation/growth curves. Squares upper, circles lower.",
+    "image_filename": "example_saturation.png",
+    "ground_truth": {
+      "figure_info": {
+        "title": null,
+        "x_axis": {"label": "", "unit": null, "min": 0, "max": 96, "scale": "linear"},
+        "y_axis": {"label": "", "unit": null, "min": 0, "max": 100, "scale": "linear"},
+        "r_squared": null,
+        "fit_type": "saturation",
+        "chart_type": "scatter_with_fit"
+      },
+      "series": [
+        {
+          "name": "Series 1",
+          "marker": "square",
+          "color": "black",
+          "line_style": "none",
+          "data_points": [
+            {"x": 0, "y": 0}, {"x": 2, "y": 2}, {"x": 6, "y": 10},
+            {"x": 12, "y": 25}, {"x": 24, "y": 45}, {"x": 48, "y": 55},
+            {"x": 72, "y": 60}, {"x": 96, "y": 62}
+          ],
+          "error_bars": [
+            {"x": 6, "y_low": 5, "y_high": 15}, {"x": 12, "y_low": 18, "y_high": 32},
+            {"x": 24, "y_low": 35, "y_high": 55}, {"x": 48, "y_low": 45, "y_high": 65},
+            {"x": 72, "y_low": 50, "y_high": 75}, {"x": 96, "y_low": 52, "y_high": 72}
+          ]
+        },
+        {
+          "name": "Series 2",
+          "marker": "circle",
+          "color": "black",
+          "line_style": "none",
+          "data_points": [
+            {"x": 0, "y": 0}, {"x": 2, "y": 1}, {"x": 6, "y": 3},
+            {"x": 12, "y": 8}, {"x": 24, "y": 15}, {"x": 48, "y": 25},
+            {"x": 72, "y": 28}, {"x": 96, "y": 30}
+          ],
+          "error_bars": [
+            {"x": 12, "y_low": 5, "y_high": 11}, {"x": 24, "y_low": 10, "y_high": 20},
+            {"x": 48, "y_low": 20, "y_high": 30}, {"x": 72, "y_low": 22, "y_high": 34},
+            {"x": 96, "y_low": 25, "y_high": 35}
+          ]
+        }
+      ],
+      "fit_curves": [
+        {
+          "name": "Saturation fit 1",
+          "color": "black",
+          "line_style": "solid",
+          "points": [
+            {"x": 0, "y": 0}, {"x": 6, "y": 8}, {"x": 12, "y": 20},
+            {"x": 24, "y": 38}, {"x": 36, "y": 48}, {"x": 48, "y": 54},
+            {"x": 60, "y": 58}, {"x": 72, "y": 60}, {"x": 84, "y": 61},
+            {"x": 96, "y": 62}
+          ]
+        },
+        {
+          "name": "Saturation fit 2",
+          "color": "black",
+          "line_style": "solid",
+          "points": [
+            {"x": 0, "y": 0}, {"x": 6, "y": 3}, {"x": 12, "y": 7},
+            {"x": 24, "y": 14}, {"x": 36, "y": 20}, {"x": 48, "y": 24},
+            {"x": 60, "y": 27}, {"x": 72, "y": 28.5}, {"x": 84, "y": 29.5},
+            {"x": 96, "y": 30}
+          ]
+        }
+      ]
+    },
+    "extraction_notes": "Two series with saturation fit curves. chart_type is scatter_with_fit."
+  },
+  {
+    "id": "bar_chart_pq",
+    "description": "Grouped bar chart. PQ hatched, Inclusion complex white. 4 time points.",
+    "image_filename": "example_barchart.png",
+    "ground_truth": {
+      "figure_info": {
+        "title": null,
+        "x_axis": {"label": "t", "unit": "h", "min": 0, "max": 2.5, "scale": "linear"},
+        "y_axis": {"label": "", "unit": null, "min": 0, "max": 60, "scale": "linear"},
+        "r_squared": null,
+        "fit_type": null,
+        "chart_type": "bar"
+      },
+      "series": [
+        {
+          "name": "PQ group",
+          "marker": "square",
+          "color": "black",
+          "line_style": "none",
+          "data_points": [
+            {"x": 0.5, "y": 22.5}, {"x": 1.0, "y": 33},
+            {"x": 1.5, "y": 39}, {"x": 2.0, "y": 43}
+          ],
+          "error_bars": [
+            {"x": 0.5, "y_low": 17, "y_high": 28}, {"x": 1.0, "y_low": 27, "y_high": 39},
+            {"x": 1.5, "y_low": 33, "y_high": 45}, {"x": 2.0, "y_low": 37, "y_high": 49}
+          ]
+        },
+        {
+          "name": "Inclusion complex group",
+          "marker": "square",
+          "color": "white",
+          "line_style": "none",
+          "data_points": [
+            {"x": 0.5, "y": 2.5}, {"x": 1.0, "y": 5.5},
+            {"x": 1.5, "y": 10}, {"x": 2.0, "y": 15}
+          ],
+          "error_bars": [
+            {"x": 0.5, "y_low": 1, "y_high": 4}, {"x": 1.0, "y_low": 3, "y_high": 8},
+            {"x": 1.5, "y_low": 6, "y_high": 14}, {"x": 2.0, "y_low": 10, "y_high": 20}
+          ]
+        }
+      ],
+      "fit_curves": []
+    },
+    "extraction_notes": "Grouped bar chart. chart_type is bar."
+  }
+]

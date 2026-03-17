@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html>
+<head><title>Image Viewer</title></head>
+<body style="background:#111;color:#fff;font-family:monospace;padding:20px;">
+<h2>Upload Images - Identify Each</h2>
+<div id="imgs"></div>
+<script>
+const files = ['37ad6d3f.png','a56ac826.png','b9564794.png','d211ec8e.png','d3df1e6d.png','dcd723db.png','f74db90b.png'];
+const div = document.getElementById('imgs');
+files.forEach(f => {
+  div.innerHTML += `<div style="margin:20px 0;border:1px solid #444;padding:10px;display:inline-block;margin-right:20px;vertical-align:top;">
+    <p style="color:#0f0;">${f}</p>
+    <img src="/uploads/${f}" style="max-width:400px;max-height:300px;">
+  </div>`;
+});
+</script>
+</body>
+</html>
