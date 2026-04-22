@@ -1,0 +1,92 @@
+%%{init: {'theme':'base', 'themeVariables': {'fontFamily':'Times New Roman','fontSize':'13px','primaryColor':'#e3eef9','primaryBorderColor':'#1f4e79','primaryTextColor':'#1a1a1a','lineColor':'#555'}} }%%
+flowchart TB
+    classDef source fill:#fff2cc,stroke:#bf8f00,stroke-width:1.3px,color:#1a1a1a
+    classDef portal fill:#dce6f2,stroke:#1f4e79,stroke-width:1.3px,color:#1a1a1a
+    classDef metab  fill:#e2efda,stroke:#385723,stroke-width:1.3px,color:#1a1a1a
+    classDef damage fill:#fce4d6,stroke:#843c0c,stroke-width:1.3px,color:#1a1a1a
+    classDef repair fill:#ead1dc,stroke:#6a1b9a,stroke-width:1.3px,color:#1a1a1a
+    classDef outcome fill:#f8cbad,stroke:#9c0000,stroke-width:1.8px,color:#1a1a1a
+    classDef systemic fill:#f2f2f2,stroke:#404040,stroke-width:1.2px,color:#1a1a1a
+
+    %% === EXPOSURE SOURCES =========================================
+    subgraph SRC["Exposure Sources"]
+        S1["Composite wood / furniture<br/>(UF, PF, MF resins)"]:::source
+        S2["Combustion<br/>(cooking, heating, wildfire)"]:::source
+        S3["Tobacco smoke & ENDS aerosols"]:::source
+        S4["Cosmetics & preservatives<br/>(quaternium-15, DMDM hydantoin)"]:::source
+        S5["Occupational<br/>(embalming, pathology, resin)"]:::source
+        S6["Atmospheric photochemistry<br/>(isoprene, VOC oxidation)"]:::source
+    end
+
+    %% === PORTAL-OF-ENTRY DOSIMETRY ================================
+    ENDO["Endogenous pool<br/>~80-100 &micro;M in blood<br/>(one-carbon metabolism,<br/>histone demethylation, methanol)"]:::systemic
+
+    SRC --> INH["Inhalation<br/>(dominant route)"]:::portal
+    SRC --> DRM["Dermal / mucosal<br/>(cosmetics, formalin)"]:::portal
+    SRC --> ING["Incidental ingestion<br/>(water, food)"]:::portal
+
+    INH --> CFD["CFD nasal dosimetry<br/>anterior-lateral meatus flux &raquo; avg<br/>(Kimbell, Subramaniam)"]:::portal
+    CFD --> ANT["Anterior nasal<br/>respiratory epithelium"]:::portal
+    CFD --> POST["Posterior nasal /<br/>nasopharyngeal mucosa"]:::portal
+
+    %% === DETOXIFICATION AXIS =====================================
+    ANT --> GSH["Non-enzymatic:<br/>CH&#8322;O + GSH &rarr;<br/>S-hydroxymethyl-GSH"]:::metab
+    POST --> GSH
+    ENDO --> GSH
+    GSH --> ADH5["ADH5 / FDH<br/>(formaldehyde<br/>dehydrogenase)"]:::metab
+    ADH5 --> SFG["S-formyl-GSH"]:::metab
+    SFG --> ESD["Esterase D (ESD)"]:::metab
+    ESD --> FORM["Formate<br/>(recycles GSH)"]:::metab
+    FORM --> FOL["Folate-dependent<br/>one-carbon pool"]:::metab
+    FOL --> CO2["CO&#8322; + H&#8322;O<br/>(~80% pulse-labelled C)"]:::metab
+    ADH5 -.secondary.-> ALDH2["ALDH2, catalase,<br/>CYP2E1 (minor flux)"]:::metab
+
+    %% === MOLECULAR INITIATING EVENTS =============================
+    ANT --> MIE["MIE:<br/>Electrophilic addition to<br/>nucleophilic N / S centres"]:::damage
+    POST --> MIE
+    ENDO -.low-level baseline.-> MIE
+
+    MIE --> ADD1["N2-hydroxymethyl-dG<br/>(major, endog + exog)"]:::damage
+    MIE --> ADD2["N6-hydroxymethyl-dA<br/>(exposure-sensitive,<br/>&sup1;&sup3;C/&sup1;&sup5;N-traceable)"]:::damage
+    MIE --> ADD3["DNA-protein<br/>crosslinks (DPC)<br/>&mdash;hallmark lesion"]:::damage
+    MIE --> ADD4["Protein-Lys/Cys adducts<br/>(Hb, HSA, histones)"]:::damage
+    MIE --> ROS["Oxidative stress<br/>(GSH depletion, ROS)"]:::damage
+
+    %% === DAMAGE-RESPONSE & REPAIR ================================
+    ADD3 --> FANC["Fanconi-anaemia /<br/>BRCA pathway<br/>(FANCD2, BRCA1/2)"]:::repair
+    ADD3 --> POLQ["POL&theta; translesion<br/>synthesis"]:::repair
+    ADD3 --> MCM89["MCM8/9 helicase<br/>fork convergence"]:::repair
+    ADD3 --> RAD51["RAD51 HR repair"]:::repair
+    ADD1 --> BER["BER / MMR<br/>(monoadduct removal)"]:::repair
+    ADD2 --> BER
+
+    FANC -.if loss-of-function.-> FAIL["AMeD / FA-like<br/>syndromes &rarr;<br/>bone-marrow failure"]:::outcome
+
+    %% === KEY EVENTS ===============================================
+    ADD3 --> KE1["KE1:<br/>Replication stress<br/>DNA damage response"]:::damage
+    ROS --> KE1
+    KE1 --> CYTO["KE2:<br/>Cytotoxicity &amp; chronic<br/>regenerative proliferation<br/>(threshold ~6 ppm in rat)"]:::damage
+    CYTO --> CLONAL["KE3:<br/>Clonal expansion<br/>of mutated cells<br/>(two-stage Conolly model)"]:::damage
+
+    %% === SYSTEMIC / HAEMATOPOIETIC ================================
+    ENDO --> BM["Bone marrow<br/>(haematopoietic stem &amp;<br/>progenitor cells)"]:::systemic
+    FAIL --> BM
+    CLONAL -.myeloid-progenitor trafficking<br/>(Zhang, Lan).-> BM
+    BM --> HSC["HSC genomic instability<br/>cytogenetic abnormalities<br/>pancytopenia"]:::damage
+
+    %% === ADVERSE OUTCOMES =========================================
+    CLONAL ==> NPC["Nasopharyngeal<br/>carcinoma (NPC)<br/>IARC sufficient evidence"]:::outcome
+    CLONAL ==> SNC["Sinonasal adenocarcinoma<br/>/ squamous carcinoma"]:::outcome
+    HSC ==> AML["Myeloid leukaemia<br/>(AML, MDS)<br/>IARC Monograph 100F"]:::outcome
+    CYTO ==> NCAN["Non-cancer respiratory:<br/>rhinoconjunctivitis,<br/>decreased PEFR,<br/>asthma exacerbation"]:::outcome
+    ADD4 ==> SENS["Allergic contact dermatitis<br/>(Type IV hypersensitivity)"]:::outcome
+
+    %% === RISK ANCHORS =============================================
+    NPC --> EPI["Beane Freeman 2009/2013<br/>NCI cohort (n=25,619)<br/>peak-exposure HR &uarr;"]:::systemic
+    AML --> EMB["Hauptmann 2009<br/>embalmers<br/>OR 3.4 (1.4-8.4)"]:::systemic
+    NCAN --> RFC["EPA IRIS 2024<br/>RfC = 0.007 mg/m&sup3;<br/>(~5.6 ppb)"]:::systemic
+    NPC --> IUR["EPA IRIS 2024<br/>IUR = 1.1 &times; 10&#8315;&#8309; per &micro;g/m&sup3;"]:::systemic
+
+    %% === REGULATORY ===============================================
+    IUR --> CLASS["IARC Group 1<br/>(2006, reaffirmed 2012, 2022)<br/>NTP 'Known Human Carcinogen'"]:::outcome
+    RFC --> OELS["OELs:<br/>OSHA PEL 0.75 ppm &bull; NIOSH REL 0.016 ppm<br/>ACGIH TLV 0.1 ppm &bull; EU IOEL 0.3 ppm<br/>WHO AQG 0.1 mg/m&sup3; (30 min)"]:::outcome
