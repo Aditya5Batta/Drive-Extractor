@@ -14,6 +14,8 @@ from typing import Any
 from config.settings import CONFIG
 from core.http import HTTPFetcher
 from core.llm import LLMAdapter
+from core.tracing import Tracer
+from core.provenance import EvidenceLedger
 from pipeline.scraper import Scraper, BatchProcessor
 from pipeline.evidence import EvidenceBuilder
 from pipeline.ledger import ExtractionLedger
@@ -47,6 +49,18 @@ class ToolContext:
     report_gen: ReportGenerator
     llm: LLMAdapter
     figures_dir: str
+    # Observability + provenance (optional; lazily bound per build_chemical_review run)
+    tracer: Tracer | None = None
+    evidence_ledger: EvidenceLedger | None = None
+
+    def bind_run(self, chemical: str, runs_dir: str = "/tmp/tox_runs") -> tuple[Tracer, EvidenceLedger]:
+        """Start a new traced run: attaches a Tracer and an EvidenceLedger for `chemical`."""
+        import os as _os
+        _os.makedirs(runs_dir, exist_ok=True)
+        self.tracer = Tracer.new(chemical, base_dir=runs_dir)
+        ledger_path = _os.path.join(runs_dir, f"{self.tracer.run_id}.ledger.jsonl")
+        self.evidence_ledger = EvidenceLedger(ledger_path)
+        return self.tracer, self.evidence_ledger
 
 
 def build_context() -> ToolContext:

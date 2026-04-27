@@ -175,7 +175,7 @@ class BaseDatabaseSource:
                 if data and status < 400 and "text/html" in ct:
                     try:
                         from core.html import HTMLExtractor
-                        html_text, _ = HTMLExtractor.extract(data, ct)
+                        html_text = HTMLExtractor.extract_text(data, ref.landing_url)
                         if html_text:
                             doc.full_text = html_text
                             doc.char_count = len(html_text)

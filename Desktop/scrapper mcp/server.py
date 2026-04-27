@@ -6,10 +6,10 @@ Heavy lifting lives in sub-packages:
   core/      — http, html, pdf, keyword search, llm, formatter primitives
   sources/   — per-source integrations (PubChem, PubMed, OpenAlex, PMC,
                JATS, agencies, the 34-DB searcher)
-  pipeline/  — linear chemical → report flow (urls, ledger, evidence,
-               scraper, multimodal figures/tables, report builder,
-               orchestrator)
-  tools/     — MCP tool schemas + handler dispatch
+  pipeline/  — linear chemical → review flow. 4-tool public surface:
+               resolve · harvest · review · audit, plus the shared
+               scraper / evidence / ledger / report primitives.
+  tools/     — MCP tool schemas + handler dispatch (4 tools)
   prompts    — MCP prompt templates
 
 Run: register this file in Claude Desktop's claude_desktop_config.json.

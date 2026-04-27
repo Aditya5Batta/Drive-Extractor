@@ -4,7 +4,9 @@ sources.openalex — OpenAlex works API client.
 Returns citation counts, PDF URLs, and related papers.
 """
 from __future__ import annotations
+import json
 from typing import Any
+from urllib.parse import quote
 
 from core.http import HTTPFetcher
 from sources._models import PaperCandidate

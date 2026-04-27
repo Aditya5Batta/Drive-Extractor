@@ -3,8 +3,8 @@ config.databases — Curated toxicology database registry.
 
 Source: mvp1_databases_final.xlsx (SciToxSynthesis).
 ALL_DATABASES is the concatenation of HIGH + MED tier entries. When you add a
-new data source, add it here — the rest of the pipeline picks it up
-automatically via pipeline.urls.DatabaseURLBuilder.
+new data source, add it here — sources.multi_harvester picks it up
+automatically during harvest_evidence.
 """
 from __future__ import annotations
 

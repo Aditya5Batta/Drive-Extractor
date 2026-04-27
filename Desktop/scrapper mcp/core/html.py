@@ -5,6 +5,9 @@ Also exposes BeautifulSoup-based link extraction. Every HTML parse path in
 the package goes through HTMLExtractor.
 """
 from __future__ import annotations
+import re
+from urllib.parse import urljoin, urlparse
+
 import trafilatura
 from bs4 import BeautifulSoup
 
@@ -43,6 +46,18 @@ class HTMLExtractor:
         # collapse excessive blank lines
         text = re.sub(r"\n{3,}", "\n\n", text)
         return text.strip()
+
+    @staticmethod
+    def extract(html_bytes: bytes, url_or_ct: str = "") -> tuple[str, str]:
+        """Unified extract → (clean_text, title). url_or_ct accepts either a URL or a content-type string.
+
+        Kept for backward compatibility with callers that pass the Content-Type header.
+        """
+        # If caller passed a content-type string, we have no URL context — use empty URL.
+        url = url_or_ct if url_or_ct.startswith("http") else ""
+        text = HTMLExtractor.extract_text(html_bytes, url)
+        title = HTMLExtractor.extract_title(html_bytes)
+        return text, title
 
     @staticmethod
     def extract_title(html_bytes: bytes) -> str:

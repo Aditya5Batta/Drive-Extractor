@@ -182,9 +182,8 @@ class PaperFinder:
     async def find(self, chemical: str, top: int = 8,
                    keywords: list[str] | None = None) -> list[PaperCandidate]:
         """Unified entry point. Runs PubMed and EuropePMC in parallel, merges,
-        ranks, and returns the top N candidates. This is the signature the
-        orchestrator (pipeline.orchestrator.run) and generate_chemical_report
-        handler call against."""
+        ranks, and returns the top N candidates. Called by pipeline.harvest
+        during the harvest_evidence MCP tool."""
         kws = list(keywords) if keywords else list(self.DEFAULT_KEYWORDS)
         pm_task = asyncio.create_task(self.search_pubmed(chemical, kws, retmax=25))
         ep_task = asyncio.create_task(self.search_europepmc(chemical, kws, page_size=25))
