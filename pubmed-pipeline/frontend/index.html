@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PubMed PDF Pipeline</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#0f1117;--panel:#1a1d27;--panel2:#21253a;--border:#2d3148;
+      --accent:#4f8ef7;--ok:#2ecc71;--fail:#e74c3c;--warn:#f39c12;
+      --text:#e8eaf0;--muted:#8890aa;--r:10px;--mono:'Cascadia Code',monospace}
+body{font:14px/1.5 'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+
+/* header */
+header{background:var(--panel);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:99}
+.hdr{max-width:1300px;margin:0 auto;padding:.7rem 1.5rem;display:flex;align-items:center;justify-content:space-between}
+.logo{font-size:1rem;font-weight:700;color:var(--accent)}
+.tabs button{background:none;border:1px solid transparent;color:var(--muted);padding:.3rem .8rem;border-radius:6px;cursor:pointer;font-size:.85rem}
+.tabs button.active{color:var(--accent);border-color:var(--accent);background:rgba(79,142,247,.08)}
+
+/* layout */
+main{max-width:1300px;margin:0 auto;padding:1.5rem}
+.page{display:none}.page.on{display:block}
+.cols{display:grid;grid-template-columns:360px 1fr;gap:1.25rem;align-items:start}
+@media(max-width:800px){.cols{grid-template-columns:1fr}}
+
+/* panels */
+.card{background:var(--panel);border:1px solid var(--border);border-radius:var(--r);padding:1.25rem}
+.card h2{font-size:.95rem;font-weight:700;margin-bottom:1rem}
+.row{display:flex;gap:.75rem}
+
+/* form */
+label{display:block;font-size:.78rem;color:var(--muted);margin-bottom:.3rem}
+input,textarea{width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:6px;
+  color:var(--text);padding:.45rem .7rem;font:inherit;outline:none}
+input:focus,textarea:focus{border-color:var(--accent)}
+textarea{font-family:var(--mono);font-size:.78rem;resize:vertical}
+.fg{margin-bottom:.8rem}.fg.h{flex:1}
+
+/* buttons */
+.btn{display:inline-flex;align-items:center;gap:.35rem;padding:.45rem .9rem;border-radius:6px;
+  border:none;cursor:pointer;font-size:.85rem;font-weight:500;transition:.15s}
+.btn-p{background:var(--accent);color:#fff}.btn-p:hover{background:#6fa3fa}
+.btn-p:disabled{opacity:.55;cursor:not-allowed}
+.btn-full{width:100%;justify-content:center;padding:.6rem}
+.btn-o{background:none;border:1px solid var(--border);color:var(--muted)}.btn-o:hover{color:var(--accent);border-color:var(--accent)}
+.btn-sm{padding:.25rem .55rem;font-size:.78rem}
+
+/* progress */
+#prog{margin-bottom:.875rem}
+.prog-hdr{display:flex;align-items:center;gap:.5rem;font-size:.82rem;color:var(--muted);margin-bottom:.4rem}
+.track{height:4px;background:var(--panel2);border-radius:2px;overflow:hidden}
+.fill{height:100%;background:var(--accent);border-radius:2px;transition:width .4s}
+.spin{width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--accent);
+  border-radius:50%;animation:s .7s linear infinite;flex-shrink:0}
+@keyframes s{to{transform:rotate(360deg)}}
+
+/* chem info */
+.chem{background:var(--panel2);border:1px solid var(--border);border-radius:6px;
+  padding:.6rem .8rem;margin-bottom:.8rem;font-size:.8rem}
+.chem-r{display:flex;gap:.6rem;padding:.15rem 0}
+.chem-l{color:var(--muted);min-width:110px}
+
+/* stat grid */
+.stats{display:grid;grid-template-columns:repeat(5,1fr);gap:.5rem;margin-bottom:.875rem}
+@media(max-width:600px){.stats{grid-template-columns:repeat(3,1fr)}}
+.stat{background:var(--panel2);border:1px solid var(--border);border-radius:7px;
+  padding:.55rem .4rem;text-align:center}
+.stat.ok{border-color:rgba(46,204,113,.35)}.stat.fl{border-color:rgba(231,76,60,.35)}
+.sn{font-size:1.35rem;font-weight:700}.stat.ok .sn{color:var(--ok)}.stat.fl .sn{color:var(--fail)}
+.sl{font-size:.68rem;color:var(--muted);margin-top:.1rem}
+
+/* badge */
+.badge{display:inline-block;font-size:.68rem;font-weight:700;padding:.12rem .45rem;border-radius:4px;text-transform:uppercase}
+.badge.success{background:rgba(46,204,113,.15);color:var(--ok)}
+.badge.partial_success{background:rgba(243,156,18,.15);color:var(--warn)}
+.badge.failed,.badge.no_results{background:rgba(231,76,60,.15);color:var(--fail)}
+.badge.started{background:rgba(79,142,247,.15);color:var(--accent)}
+
+/* table */
+.tscroll{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:.78rem}
+th{background:var(--panel2);padding:.5rem .7rem;text-align:left;color:var(--muted);
+  font-weight:600;border-bottom:1px solid var(--border);white-space:nowrap}
+td{padding:.45rem .7rem;border-bottom:1px solid rgba(45,49,72,.5);vertical-align:top}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(255,255,255,.015)}
+.tc{max-width:260px}
+.tc a,.pmid a{color:var(--accent);text-decoration:none}.tc a:hover,.pmid a:hover{text-decoration:underline}
+.kpill{display:inline-block;background:rgba(79,142,247,.12);color:var(--accent);
+  border-radius:3px;padding:.08rem .35rem;font-size:.7rem;white-space:nowrap}
+
+/* dl badge */
+.dl{display:inline-flex;align-items:center;gap:.25rem;font-size:.72rem;font-weight:700}
+.dl.success{color:var(--ok)}.dl.failed,.dl.no_pdf_found{color:var(--fail)}.dl.skipped,.dl.pending{color:var(--muted)}
+
+/* misc */
+.ph{display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:.7rem;padding:3rem 1rem;color:var(--muted);text-align:center}
+.ph .ico{font-size:2.2rem}
+.err{background:rgba(231,76,60,.1);border:1px solid rgba(231,76,60,.35);border-radius:6px;
+  padding:.8rem 1rem;color:#f08080;font-size:.85rem;white-space:pre-wrap}
+.sec-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem}
+.run-bar{display:flex;align-items:center;gap:.6rem;margin-bottom:.75rem;flex-wrap:wrap}
+.run-bar code{font-family:var(--mono);font-size:.82rem;color:var(--accent)}
+
+/* detail sub-tabs */
+.dtabs{display:flex;gap:.35rem;margin-bottom:.75rem;border-bottom:1px solid var(--border);padding-bottom:.45rem}
+.dtab{background:none;border:none;color:var(--muted);padding:.28rem .65rem;border-radius:5px;cursor:pointer;font-size:.78rem}
+.dtab.active{color:var(--accent);background:rgba(79,142,247,.1)}
+.dsec{display:none}.dsec.on{display:block}
+.dbtn{background:none;border:1px solid var(--border);color:var(--accent);padding:.18rem .5rem;border-radius:4px;cursor:pointer;font-size:.72rem}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hdr">
+    <div class="logo">📄 PubMed PDF Pipeline</div>
+    <div class="tabs">
+      <button class="active" onclick="switchTab('search',this)">New Search</button>
+      <button onclick="switchTab('history',this)">Run History</button>
+    </div>
+  </div>
+</header>
+
+<main>
+
+<!-- ══ SEARCH PAGE ══ -->
+<div id="pg-search" class="page on">
+  <div class="cols">
+
+    <!-- Input -->
+    <div class="card">
+      <h2>Search Parameters</h2>
+      <div class="fg">
+        <label>Chemical Name or CAS Number</label>
+        <input id="chem" type="text" placeholder="e.g. Benzene or 71-43-2">
+      </div>
+      <div class="fg">
+        <label>Keywords <span style="opacity:.6;font-size:.72rem">(one per line)</span></label>
+        <textarea id="kws" rows="11">pharmacokinetic
+toxicokinetic
+AUC
+Cmax
+clearance
+metabolism
+absorption
+plasma
+blood plasma concentration
+serum
+blood</textarea>
+      </div>
+      <div class="row" style="margin-bottom:.8rem">
+        <div class="fg h">
+          <label>Max PubMed results / keyword</label>
+          <input id="maxr" type="number" value="20" min="1" max="100">
+        </div>
+        <div class="fg h">
+          <label>Max PDFs / keyword</label>
+          <input id="maxp" type="number" value="5" min="1" max="20">
+        </div>
+      </div>
+      <button id="runBtn" class="btn btn-p btn-full" onclick="runPipeline()">▶ Run Pipeline</button>
+    </div>
+
+    <!-- Results -->
+    <div class="card" id="results-card">
+      <div id="ph" class="ph"><div class="ico">🔬</div><p>Enter a chemical and click <strong>Run Pipeline</strong>.</p></div>
+      <div id="prog" style="display:none">
+        <div class="prog-hdr"><div class="spin"></div><span id="prog-lbl">Starting…</span></div>
+        <div class="track"><div class="fill" id="prog-fill" style="width:0%"></div></div>
+      </div>
+      <div id="summary" style="display:none">
+        <div class="run-bar">
+          <span style="font-size:.72rem;color:var(--muted)">Run ID</span>
+          <code id="s-rid"></code><span id="s-status" class="badge"></span>
+        </div>
+        <div class="chem" id="s-chem"></div>
+        <div class="stats">
+          <div class="stat"><div class="sn" id="st-kw">0</div><div class="sl">Keywords</div></div>
+          <div class="stat"><div class="sn" id="st-hits">0</div><div class="sl">Total Hits</div></div>
+          <div class="stat"><div class="sn" id="st-p">0</div><div class="sl">Papers</div></div>
+          <div class="stat ok"><div class="sn" id="st-ok">0</div><div class="sl">PDFs ✓</div></div>
+          <div class="stat fl"><div class="sn" id="st-fl">0</div><div class="sl">PDFs ✗</div></div>
+        </div>
+      </div>
+      <div id="ptable" style="display:none">
+        <div class="sec-hdr">
+          <strong style="font-size:.88rem">Papers</strong>
+          <button class="btn btn-o btn-sm" onclick="exportCsv()">⬇ CSV</button>
+        </div>
+        <div class="tscroll">
+          <table><thead><tr><th>#</th><th>Keyword</th><th>Title</th><th>Journal/Year</th><th>PMID</th><th>PDF</th></tr></thead>
+          <tbody id="ptbody"></tbody></table>
+        </div>
+      </div>
+      <div id="err" class="err" style="display:none"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══ HISTORY PAGE ══ -->
+<div id="pg-history" class="page">
+  <div class="card" style="margin-bottom:1rem">
+    <div class="sec-hdr">
+      <h2 style="margin:0">Run History</h2>
+      <button class="btn btn-o btn-sm" onclick="loadHistory()">↻ Refresh</button>
+    </div>
+    <div class="tscroll">
+      <table><thead><tr>
+        <th>Run ID</th><th>Chemical</th><th>Preferred Name</th><th>CAS</th>
+        <th>Status</th><th>KW</th><th>Hits</th><th>Papers</th>
+        <th>✓ PDFs</th><th>✗ PDFs</th><th>Date</th><th></th>
+      </tr></thead>
+      <tbody id="htbody"></tbody></table>
+    </div>
+    <div id="h-empty" class="ph" style="display:none"><div class="ico">📭</div><p>No runs yet.</p></div>
+  </div>
+
+  <div class="card" id="detail-panel" style="display:none">
+    <div class="sec-hdr">
+      <strong id="detail-title"></strong>
+      <button class="btn btn-o btn-sm" onclick="closeDetail()">✕ Close</button>
+    </div>
+    <div class="dtabs">
+      <button class="dtab active" onclick="showDtab('dp',this)">Papers</button>
+      <button class="dtab" onclick="showDtab('dc',this)">API Calls</button>
+    </div>
+    <div id="dp" class="dsec on">
+      <div class="tscroll">
+        <table><thead><tr><th>#</th><th>Keyword</th><th>Title</th><th>PMID</th><th>PDF Status</th><th>Source</th></tr></thead>
+        <tbody id="dp-body"></tbody></table>
+      </div>
+    </div>
+    <div id="dc" class="dsec">
+      <div class="tscroll">
+        <table><thead><tr><th>Type</th><th>Keyword</th><th>Query</th><th>Hits</th><th>Status</th><th>Message</th></tr></thead>
+        <tbody id="dc-body"></tbody></table>
+      </div>
+    </div>
+  </div>
+</div>
+
+</main>
+
+<script>
+const API = window.location.protocol === 'file:' ? 'http://localhost:8000' : '';
+let lastData = null;
+
+// ── tabs ──────────────────────────────────────────────────────────────────────
+function switchTab(name, btn) {
+  document.querySelectorAll('.tabs button').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('on'));
+  btn.classList.add('active');
+  document.getElementById(`pg-${name}`).classList.add('on');
+  if (name === 'history') loadHistory();
+}
+
+// ── run pipeline ──────────────────────────────────────────────────────────────
+async function runPipeline() {
+  const chem = document.getElementById('chem').value.trim();
+  if (!chem) return alert('Enter a chemical name or CAS number.');
+  const kws = document.getElementById('kws').value.split('\n').map(k=>k.trim()).filter(Boolean);
+  if (!kws.length) return alert('Enter at least one keyword.');
+
+  const btn = document.getElementById('runBtn');
+  btn.disabled = true;
+  hide('ph'); hide('summary'); hide('ptable'); hide('err');
+  setProgress('Verifying chemical via PubChem…', 10);
+
+  try {
+    setProgress('Searching PubMed & downloading PDFs…', 40);
+    const res = await fetch(`${API}/api/run`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        chemical: chem,
+        keywords: kws,
+        max_results: +document.getElementById('maxr').value || 20,
+        max_pdfs:    +document.getElementById('maxp').value || 5,
+      }),
+    });
+    if (!res.ok) { const e = await res.json().catch(()=>({detail:res.statusText})); throw new Error(e.detail); }
+    setProgress('Storing to PostgreSQL…', 85);
+    const data = await res.json();
+    await sleep(300); setProgress('Done!', 100); await sleep(350);
+    lastData = data;
+    renderResults(data);
+  } catch(e) {
+    show('ph'); showErr(e.message);
+  } finally {
+    btn.disabled = false;
+    hide('prog');
+  }
+}
+
+function renderResults(d) {
+  hide('prog'); hide('ph');
+
+  // summary
+  document.getElementById('s-rid').textContent = d.run_id;
+  setBadge('s-status', d.status);
+  const c = d.chemical;
+  document.getElementById('s-chem').innerHTML =
+    `<div class="chem-r"><span class="chem-l">Preferred name</span><span>${esc(c.preferred_name||'—')}</span></div>
+     <div class="chem-r"><span class="chem-l">CAS RN</span><span>${esc(c.casrn||'—')}</span></div>
+     <div class="chem-r"><span class="chem-l">PubChem CID</span><span>${esc(c.pubchem_cid||'—')}</span></div>`;
+  const s = d.summary;
+  setText('st-kw',s.keywords_searched); setText('st-hits',s.total_pubmed_hits);
+  setText('st-p',s.papers_found); setText('st-ok',s.pdfs_downloaded); setText('st-fl',s.pdfs_failed);
+  show('summary');
+
+  // table
+  const tb = document.getElementById('ptbody'); tb.innerHTML='';
+  d.papers.forEach((p,i) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${i+1}</td>
+      <td><span class="kpill">${esc(p.keyword||'')}</span></td>
+      <td class="tc">${p.pubmed_url?`<a href="${p.pubmed_url}" target="_blank">${esc(p.title||'—')}</a>`:esc(p.title||'—')}</td>
+      <td>${esc(p.journal||'—')}${p.year?`<br><small style="color:var(--muted)">${p.year}</small>`:''}</td>
+      <td class="pmid">${p.pmid?`<a href="https://pubmed.ncbi.nlm.nih.gov/${p.pmid}/" target="_blank">${p.pmid}</a>`:'—'}</td>
+      <td>${dlBadge(p)}</td>`;
+    tb.appendChild(tr);
+  });
+  show('ptable');
+}
+
+function dlBadge(p) {
+  if (p.pdf_status==='success' && p.pdf_path) {
+    const fn = p.pdf_path.split(/[/\\]/).pop();
+    return `<a href="/pdfs/${fn}" target="_blank" class="dl success">✓ PDF</a>`;
+  }
+  const icons = {failed:'✗',no_pdf_found:'∅',skipped:'—',pending:'…'};
+  return `<span class="dl ${p.pdf_status}">${icons[p.pdf_status]||'?'} ${(p.pdf_status||'').replace(/_/g,' ')}</span>`;
+}
+
+// ── CSV export ────────────────────────────────────────────────────────────────
+function exportCsv() {
+  if (!lastData) return;
+  const cols = ['rank','keyword','pmid','title','journal','year','doi','pubmed_url','pdf_url','pdf_status','pdf_path','pdf_source'];
+  const rows = [cols.join(','), ...lastData.papers.map((p,i)=>cols.map(c=>{
+    const v = c==='rank'?i+1:(p[c]??''); return `"${String(v).replace(/"/g,'""')}"`;
+  }).join(','))];
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([rows.join('\n')],{type:'text/csv'}));
+  a.download = `${lastData.run_id}_papers.csv`; a.click();
+}
+
+// ── history ───────────────────────────────────────────────────────────────────
+async function loadHistory() {
+  const tb = document.getElementById('htbody'); tb.innerHTML='';
+  hide('h-empty');
+  try {
+    const runs = await fetch(`${API}/api/runs`).then(r=>r.json());
+    if (!runs.length) { show('h-empty'); return; }
+    runs.forEach(r => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><code style="font-family:var(--mono);font-size:.72rem;color:var(--accent)">${esc(r.run_id)}</code></td>
+        <td>${esc(r.chemical)}</td><td>${esc(r.preferred_name||'—')}</td><td>${esc(r.casrn||'—')}</td>
+        <td><span class="badge ${r.status}">${r.status}</span></td>
+        <td>${r.kw_searched}</td><td>${r.total_hits}</td><td>${r.papers_found}</td>
+        <td style="color:var(--ok)">${r.pdfs_ok}</td><td style="color:var(--fail)">${r.pdfs_fail}</td>
+        <td style="font-size:.72rem;color:var(--muted);white-space:nowrap">${fmtDate(r.created_at)}</td>
+        <td><button class="dbtn" onclick="loadDetail('${r.run_id}')">View</button></td>`;
+      tb.appendChild(tr);
+    });
+  } catch(e) { tb.innerHTML=`<tr><td colspan="12" style="color:var(--fail)">Error: ${esc(e.message)}</td></tr>`; }
+}
+
+async function loadDetail(runId) {
+  document.getElementById('detail-title').textContent = `Details — ${runId}`;
+  show('detail-panel');
+  window.scrollTo({top:document.getElementById('detail-panel').offsetTop-80,behavior:'smooth'});
+
+  const [papers,calls] = await Promise.all([
+    fetch(`${API}/api/runs/${runId}/papers`).then(r=>r.json()).catch(()=>[]),
+    fetch(`${API}/api/runs/${runId}/calls`).then(r=>r.json()).catch(()=>[]),
+  ]);
+
+  document.getElementById('dp-body').innerHTML = papers.map((p,i)=>`
+    <tr><td>${i+1}</td>
+    <td><span class="kpill">${esc(p.keyword||'')}</span></td>
+    <td class="tc">${p.pubmed_url?`<a href="${p.pubmed_url}" target="_blank">${esc(p.title||'—')}</a>`:esc(p.title||'—')}</td>
+    <td class="pmid">${p.pmid||'—'}</td>
+    <td><span class="dl ${p.pdf_status}">${p.pdf_status}</span></td>
+    <td>${esc(p.pdf_source||'—')}</td></tr>`).join('');
+
+  document.getElementById('dc-body').innerHTML = calls.map(c=>`
+    <tr><td><code style="font-size:.72rem">${esc(c.type)}</code></td>
+    <td>${esc(c.keyword||'—')}</td>
+    <td style="max-width:200px;word-break:break-word;font-size:.72rem">${esc(c.query||'—')}</td>
+    <td>${c.hits??'—'}</td>
+    <td><span class="badge ${c.status}">${c.status}</span></td>
+    <td style="font-size:.72rem;color:var(--muted)">${esc(c.message||c.error||'—')}</td></tr>`).join('');
+}
+
+function closeDetail() { hide('detail-panel'); }
+
+function showDtab(id, btn) {
+  document.querySelectorAll('.dtab').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.dsec').forEach(s=>s.classList.remove('on'));
+  btn.classList.add('active'); document.getElementById(id).classList.add('on');
+}
+
+// ── helpers ───────────────────────────────────────────────────────────────────
+function show(id){const e=document.getElementById(id);if(e)e.style.display=''}
+function hide(id){const e=document.getElementById(id);if(e)e.style.display='none'}
+function setText(id,v){document.getElementById(id).textContent=v}
+function sleep(ms){return new Promise(r=>setTimeout(r,ms))}
+function esc(s){return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+function fmtDate(s){if(!s)return'—';const d=new Date(s);return d.toLocaleDateString()+' '+d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}
+function showErr(msg){const e=document.getElementById('err');e.textContent='⚠ '+msg;show('err')}
+function setBadge(id,s){const e=document.getElementById(id);e.textContent=s;e.className=`badge ${s}`}
+function setProgress(lbl,pct){
+  show('prog');
+  document.getElementById('prog-lbl').textContent=lbl;
+  document.getElementById('prog-fill').style.width=pct+'%';
+}
+</script>
+</body>
+</html>
