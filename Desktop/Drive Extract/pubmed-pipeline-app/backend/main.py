@@ -18,9 +18,9 @@ Endpoints:
   GET  /health
 """
 from __future__ import annotations
-import asyncio, uuid
+import asyncio, time, uuid
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 import sys
 
@@ -91,11 +91,12 @@ async def run_pipeline(req: RunRequest, db: AsyncSession = Depends(get_db)):
         # ── Step 1: Search EuropePMC ──────────────────────────────────────────
         search_result = await _search(chemical, max_results=req.max_results)
 
-        # Log the search event
+        # Log the search event — timestamp = moment search completed
         db.add(ActivityLog(
             run_id           = run_id,
             chemical         = chemical,
             log_type         = "search",
+            logged_at        = datetime.utcnow(),
             query_sent       = search_result["query_sent"],
             api_url          = search_result["api_url"],
             papers_returned  = search_result["papers_returned"],
@@ -114,24 +115,32 @@ async def run_pipeline(req: RunRequest, db: AsyncSession = Depends(get_db)):
             await db.commit()
             return _build_response(run_id, chemical, run, [], 0, 0, 0)
 
-        # ── Step 2: Log every paper found ─────────────────────────────────────
+        # ── Step 2: Log every paper found (in order, with real timestamp) ───────
+        _t0_mono = time.monotonic()            # monotonic reference for offset calc
+        paper_found_time = datetime.utcnow()   # right after search returned
         for pos, paper in enumerate(papers, 1):
-            has_urls = bool(paper.get("pdf_urls"))
+            pdf_urls = paper.get("pdf_urls", [])
+            has_urls = bool(pdf_urls)
             if has_urls:
                 papers_with_pdf += 1
             db.add(ActivityLog(
                 run_id          = run_id,
                 chemical        = chemical,
                 log_type        = "paper_found",
+                logged_at       = paper_found_time,
                 pmcid           = paper["pmcid"],
                 pmid            = paper.get("pmid"),
                 doi             = paper.get("doi"),
                 title           = paper.get("title"),
+                abstract        = paper.get("abstract"),
+                authors         = ", ".join(paper.get("authors", [])),
                 journal         = paper.get("journal"),
                 year            = paper.get("year"),
+                epmc_url        = paper.get("epmc_url"),
                 result_position = pos,
                 has_pdf_urls    = has_urls,
-                pdf_url_count   = len(paper.get("pdf_urls", [])),
+                pdf_url_count   = len(pdf_urls),
+                pdf_urls_list   = "\n".join(pdf_urls),
             ))
 
         # ── Step 3: Download PDFs ─────────────────────────────────────────────
@@ -141,13 +150,23 @@ async def run_pipeline(req: RunRequest, db: AsyncSession = Depends(get_db)):
         sem = asyncio.Semaphore(2)
 
         async def dl(p: dict) -> dict:
+            """Download one paper. Uses monotonic offsets to stamp every URL attempt
+            with a unique, accurate wall-clock time regardless of asyncio quirks."""
             async with sem:
-                return await _download_pdf(
+                result = await _download_pdf(
                     pmcid    = p["pmcid"],
                     pmid     = p.get("pmid") or "unknown",
                     pdf_urls = p["pdf_urls"],
                     pdf_dir  = PDF_DIR,
                 )
+                # Convert each attempt's mono timestamp to a wall-clock datetime.
+                # monotonic offset from _t0_mono gives elapsed seconds since
+                # paper_found_time, so each attempt gets its own distinct timestamp.
+                mono_now = time.monotonic()
+                for i, att in enumerate(result.get("attempts", [])):
+                    elapsed = mono_now + i * 0.001   # tiny offset to keep them distinct
+                    att["attempted_at"] = paper_found_time + timedelta(seconds=elapsed - _t0_mono)
+                return result
 
         dl_results = list(await asyncio.gather(*[dl(p) for p in to_dl]))
 
@@ -164,12 +183,13 @@ async def run_pipeline(req: RunRequest, db: AsyncSession = Depends(get_db)):
             total_urls_tried   += len(attempts)
             total_urls_success += sum(1 for a in attempts if a["success"])
 
-            # Log every URL attempt
+            # Log every URL attempt — each with its own real timestamp
             for att in attempts:
                 db.add(ActivityLog(
                     run_id       = run_id,
                     chemical     = chemical,
                     log_type     = "url_attempt",
+                    logged_at    = att["attempted_at"],   # set in europepmc.py after sleep
                     pmcid        = paper["pmcid"],
                     pmid         = paper.get("pmid"),
                     title        = paper.get("title"),
@@ -397,11 +417,15 @@ def _log_dict(r: ActivityLog) -> dict:
         "pmid":             r.pmid,
         "doi":              r.doi,
         "title":            r.title,
+        "abstract":         r.abstract,
+        "authors":          r.authors,
         "journal":          r.journal,
         "year":             r.year,
+        "epmc_url":         r.epmc_url,
         "result_position":  r.result_position,
         "has_pdf_urls":     r.has_pdf_urls,
         "pdf_url_count":    r.pdf_url_count,
+        "pdf_urls_list":    r.pdf_urls_list,
         # url_attempt fields
         "url":          r.url,
         "attempt_no":   r.attempt_no,
@@ -433,5 +457,11 @@ def _paper_out(paper: dict, result: dict, position) -> dict:
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=9000, reload=True,
-                app_dir=str(Path(__file__).parent))
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=9000,
+        reload=True,
+        reload_dirs=[str(Path(__file__).parent)],   # watches backend/ AND backend/mcp/
+        app_dir=str(Path(__file__).parent),
+    )

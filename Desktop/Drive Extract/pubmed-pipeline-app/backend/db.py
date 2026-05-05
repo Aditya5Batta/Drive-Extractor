@@ -12,6 +12,8 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
+from datetime import datetime
+
 from sqlalchemy import (
     Boolean, Column, DateTime, Float, ForeignKey,
     Integer, String, Text, func,
@@ -45,7 +47,7 @@ class Run(Base):
     id                 = Column(Integer, primary_key=True, autoincrement=True)
     run_id             = Column(String(32),  unique=True, nullable=False, index=True)
     chemical           = Column(String(256), nullable=False)
-    started_at         = Column(DateTime,    default=func.now())
+    started_at         = Column(DateTime,    default=datetime.utcnow)
     finished_at        = Column(DateTime,    nullable=True)
     duration_s         = Column(Float,       nullable=True)
 
@@ -95,7 +97,7 @@ class Paper(Base):
     pdf_path        = Column(Text,        nullable=True)    # local file path
     file_size_kb    = Column(Integer,     nullable=True)
 
-    downloaded_at   = Column(DateTime,    default=func.now())
+    downloaded_at   = Column(DateTime,    default=datetime.utcnow)
 
 
 # ── TABLE 3: activity_logs ────────────────────────────────────────────────────
@@ -113,7 +115,7 @@ class ActivityLog(Base):
     run_id       = Column(String(32), ForeignKey("runs.run_id"), nullable=False, index=True)
     chemical     = Column(String(256), nullable=True)
     log_type     = Column(String(32),  nullable=False, index=True)  # search / paper_found / url_attempt
-    logged_at    = Column(DateTime,    default=func.now())
+    logged_at    = Column(DateTime,    default=datetime.utcnow)
 
     # ── search fields (log_type = "search") ──────────────────────────────────
     query_sent       = Column(Text,    nullable=True)   # full query string sent
@@ -127,11 +129,15 @@ class ActivityLog(Base):
     pmid            = Column(String(32), nullable=True)
     doi             = Column(String(128),nullable=True)
     title           = Column(Text,       nullable=True)
+    abstract        = Column(Text,       nullable=True)
+    authors         = Column(Text,       nullable=True)  # comma-separated full names
     journal         = Column(String(256),nullable=True)
     year            = Column(String(8),  nullable=True)
+    epmc_url        = Column(Text,       nullable=True)  # link to EuropePMC article page
     result_position = Column(Integer,    nullable=True)  # rank in search results (1-based)
     has_pdf_urls    = Column(Boolean,    nullable=True)  # did paper have any PDF URLs?
     pdf_url_count   = Column(Integer,    nullable=True)  # how many PDF URLs found
+    pdf_urls_list   = Column(Text,       nullable=True)  # all PDF URLs, newline-separated
 
     # ── url_attempt fields (log_type = "url_attempt") ─────────────────────────
     url          = Column(Text,        nullable=True)

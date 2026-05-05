@@ -3,6 +3,7 @@ EuropePMC API client — returns full per-URL attempt trace for DB logging.
 """
 from __future__ import annotations
 import asyncio, time
+from datetime import datetime
 from pathlib import Path
 
 import httpx
@@ -131,6 +132,7 @@ async def download_pdf(pmcid: str, pmid: str, pdf_urls: list[str],
     ) as c:
         for i, url in enumerate(pdf_urls, 1):
             await asyncio.sleep(0.4)
+            attempted_at = datetime.utcnow()   # captured right before the HTTP call
             attempt = {
                 "url":          url,
                 "attempt_no":   i,
@@ -140,6 +142,7 @@ async def download_pdf(pmcid: str, pmid: str, pdf_urls: list[str],
                 "success":      False,
                 "file_size_kb": None,
                 "error":        None,
+                "attempted_at": attempted_at,
             }
             try:
                 r   = await c.get(url)
