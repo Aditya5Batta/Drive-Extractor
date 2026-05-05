@@ -22,7 +22,11 @@ HEADERS    = {
 
 async def search(query: str, max_results: int = 25) -> dict:
     """
-    Search EuropePMC for open-access papers.
+    Search EuropePMC for ALL papers — no open-access filter.
+    Every paper returned by EuropePMC is included and logged in activity_logs
+    in relevance order.  Papers with a free PDF will be attempted; others
+    will be logged as no_url (no free PDF available).
+
     Returns:
       {
         query_sent, api_url, papers_returned, papers_with_pmcid,
@@ -30,7 +34,7 @@ async def search(query: str, max_results: int = 25) -> dict:
       }
     """
     params = {
-        "query":      f"({query}) AND (OPEN_ACCESS:Y)",
+        "query":      query,          # no OPEN_ACCESS filter — return ALL papers
         "format":     "json",
         "pageSize":   max_results,
         "resultType": "core",
@@ -58,55 +62,71 @@ async def search(query: str, max_results: int = 25) -> dict:
     papers_returned = len(all_results)
 
     papers = []
-    for item in all_results:
-        pmcid = item.get("pmcid") or ""
-        if not pmcid:
-            continue
-        if not pmcid.startswith("PMC"):
-            pmcid = f"PMC{pmcid}"
+    papers_with_pmcid = 0
 
-        pmid = item.get("pmid")
+    for item in all_results:
+        raw_pmcid = (item.get("pmcid") or "").strip()
+        if raw_pmcid and not raw_pmcid.startswith("PMC"):
+            raw_pmcid = f"PMC{raw_pmcid}"
+        pmcid = raw_pmcid or None          # None = no PMC record (paywalled)
+
+        pmid = item.get("pmid") or None
 
         # Collect PDF URLs explicitly listed in the API response
         api_pdf_urls = []
         for ft in item.get("fullTextUrlList", {}).get("fullTextUrl", []):
             if ft.get("documentStyle") == "pdf":
                 url = ft.get("url", "").strip()
-                if url:
+                if url and url not in api_pdf_urls:   # deduplicate
                     api_pdf_urls.append(url)
 
-        # has_pdf_from_api = True only when EuropePMC explicitly returned PDF links
+        # has_pdf_from_api = True only when EuropePMC API explicitly provided PDF links
         has_pdf_from_api = bool(api_pdf_urls)
 
-        # Always append EuropePMC native render as final fallback
-        all_pdf_urls = api_pdf_urls + [f"https://europepmc.org/articles/{pmcid}?pdf=render"]
+        # Build the list of URLs we will actually try:
+        #   - start with any API-provided PDF links
+        #   - add the EuropePMC render fallback ONLY if we have a PMCID
+        #     and it isn't already in the list (prevents duplicates)
+        all_pdf_urls = list(api_pdf_urls)
+        if pmcid:
+            render_url = f"https://europepmc.org/articles/{pmcid}?pdf=render"
+            if render_url not in all_pdf_urls:
+                all_pdf_urls.append(render_url)
+            papers_with_pmcid += 1
+
+        # EuropePMC article page link
+        if pmid:
+            epmc_url = f"https://europepmc.org/article/MED/{pmid}"
+        elif pmcid:
+            epmc_url = f"https://europepmc.org/articles/{pmcid}"
+        else:
+            epmc_url = None
 
         papers.append({
-            "pmcid":            pmcid,
-            "pmid":             pmid,
-            "doi":              item.get("doi"),
-            "title":            item.get("title", "").strip(),
-            "abstract":         item.get("abstractText", "").strip(),
-            "authors":          [a.get("fullName", "")
-                                 for a in item.get("authorList", {}).get("author", [])],
-            "journal":          item.get("journalTitle", ""),
-            "year":             str(item.get("pubYear") or ""),
-            "epmc_url":         (f"https://europepmc.org/article/MED/{pmid}"
-                                 if pmid else f"https://europepmc.org/articles/{pmcid}"),
-            "pdf_urls":         all_pdf_urls,       # what we'll actually try
-            "has_pdf_from_api": has_pdf_from_api,   # did API explicitly give PDF links?
-            "api_pdf_url_count": len(api_pdf_urls), # how many from API (excluding fallback)
+            "pmcid":             pmcid,
+            "pmid":              pmid,
+            "doi":               item.get("doi"),
+            "title":             item.get("title", "").strip(),
+            "abstract":          item.get("abstractText", "").strip(),
+            "authors":           [a.get("fullName", "")
+                                  for a in item.get("authorList", {}).get("author", [])],
+            "journal":           item.get("journalTitle", ""),
+            "year":              str(item.get("pubYear") or ""),
+            "epmc_url":          epmc_url,
+            "pdf_urls":          all_pdf_urls,        # URLs we will try (empty = no free PDF)
+            "has_pdf_from_api":  has_pdf_from_api,    # API explicitly gave PDF links?
+            "api_pdf_url_count": len(api_pdf_urls),   # API-provided links only
         })
 
     return {
-        "query_sent":       params["query"],
-        "api_url":          api_url,
-        "papers_returned":  papers_returned,
-        "papers_with_pmcid": len(papers),
-        "response_time_ms": response_time_ms,
-        "status":           "ok",
-        "error":            None,
-        "papers":           papers,
+        "query_sent":        params["query"],
+        "api_url":           api_url,
+        "papers_returned":   papers_returned,
+        "papers_with_pmcid": papers_with_pmcid,
+        "response_time_ms":  response_time_ms,
+        "status":            "ok",
+        "error":             None,
+        "papers":            papers,
     }
 
 

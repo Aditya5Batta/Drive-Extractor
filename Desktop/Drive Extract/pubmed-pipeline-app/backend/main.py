@@ -163,7 +163,7 @@ async def run_pipeline(req: RunRequest, db: AsyncSession = Depends(get_db)):
             with a unique, accurate wall-clock time regardless of asyncio quirks."""
             async with sem:
                 result = await _download_pdf(
-                    pmcid    = p["pmcid"],
+                    pmcid    = p["pmcid"] or "unknown",
                     pmid     = p.get("pmid") or "unknown",
                     pdf_urls = p["pdf_urls"],
                     pdf_dir  = PDF_DIR,
