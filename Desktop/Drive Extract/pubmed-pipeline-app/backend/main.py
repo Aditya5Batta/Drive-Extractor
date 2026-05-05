@@ -34,17 +34,28 @@ from pydantic import BaseModel
 from sqlalchemy import desc, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from db import ActivityLog, Paper, Run, get_db, init_db
+from db import (
+    ActivityLog, Paper, Run,
+    PmcActivityLog, PmcPaper, PmcRun,
+    get_db, init_db,
+)
+# EuropePMC — untouched original module
 from europepmc import download_pdf as _download_pdf
 from europepmc import search as _search
+# PMC — new separate module in mcp/pmc/
+from pmc import download_pdf as _pmc_download_pdf
+from pmc import search as _pmc_search
 
-PDF_DIR  = Path(__file__).parent.parent / "pdfs"
-FRONTEND = Path(__file__).parent.parent / "frontend"
+PDF_DIR      = Path(__file__).parent.parent / "pdfs"
+PDF_DIR_EPMC = PDF_DIR / "europepmc"
+PDF_DIR_PMC  = PDF_DIR / "pmc"
+FRONTEND     = Path(__file__).parent.parent / "frontend"
 
 
 @asynccontextmanager
 async def lifespan(_):
-    PDF_DIR.mkdir(parents=True, exist_ok=True)
+    PDF_DIR_EPMC.mkdir(parents=True, exist_ok=True)
+    PDF_DIR_PMC.mkdir(parents=True, exist_ok=True)
     await init_db()
     yield
 
@@ -55,8 +66,10 @@ app.add_middleware(
     allow_origins=["*"], allow_methods=["*"], allow_headers=["*"],
 )
 
-if PDF_DIR.exists():
-    app.mount("/pdfs", StaticFiles(directory=str(PDF_DIR)), name="pdfs")
+PDF_DIR_EPMC.mkdir(parents=True, exist_ok=True)
+PDF_DIR_PMC.mkdir(parents=True, exist_ok=True)
+app.mount("/pdfs/europepmc", StaticFiles(directory=str(PDF_DIR_EPMC)), name="pdfs_epmc")
+app.mount("/pdfs/pmc",       StaticFiles(directory=str(PDF_DIR_PMC)),  name="pdfs_pmc")
 if FRONTEND.exists():
     app.mount("/static", StaticFiles(directory=str(FRONTEND)), name="static")
 
@@ -175,7 +188,7 @@ async def run_pipeline(req: RunRequest, db: AsyncSession = Depends(get_db)):
                     pmcid    = p["pmcid"] or "unknown",
                     pmid     = p.get("pmid") or "unknown",
                     pdf_urls = p["pdf_urls"],
-                    pdf_dir  = PDF_DIR,
+                    pdf_dir  = PDF_DIR_EPMC,
                 )
                 mono_now = time.monotonic()
                 for i, att in enumerate(result.get("attempts", [])):
@@ -286,6 +299,202 @@ async def run_pipeline(req: RunRequest, db: AsyncSession = Depends(get_db)):
                            pdfs_ok, pdfs_fail, pdfs_skip, pdfs_no_url)
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# PMC pipeline  —  mirrors EuropePMC but uses PmcRun / PmcPaper / PmcActivityLog
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.post("/api/pmc/run")
+async def pmc_run_pipeline(req: RunRequest, db: AsyncSession = Depends(get_db)):
+    run_id  = f"PMC_{uuid.uuid4().hex[:8].upper()}"
+    started = datetime.utcnow()
+    chemical = req.chemical.strip()
+
+    run = PmcRun(run_id=run_id, chemical=chemical, status="started")
+    db.add(run)
+    await db.flush()
+
+    papers_out = []
+    pdfs_ok = pdfs_fail = pdfs_skip = pdfs_no_url = 0
+    papers_with_pdf = 0
+    total_urls_tried = total_urls_success = 0
+
+    try:
+        auto_max = min(req.max_pdfs * 10, 200)
+        search_result = await _pmc_search(chemical, max_results=auto_max)
+
+        db.add(PmcActivityLog(
+            run_id            = run_id,
+            chemical          = chemical,
+            log_type          = "search",
+            logged_at         = datetime.utcnow(),
+            sort_order        = 0,
+            query_sent        = search_result["query_sent"],
+            api_url           = search_result["api_url"],
+            papers_returned   = search_result["papers_returned"],
+            papers_with_pmcid = search_result["papers_with_pmcid"],
+            response_time_ms  = search_result["response_time_ms"],
+        ))
+
+        papers = search_result["papers"]
+        run.papers_found = len(papers)
+        await db.flush()
+
+        if not papers:
+            run.status      = "no_results"
+            run.finished_at = datetime.utcnow()
+            run.duration_s  = (run.finished_at - started).total_seconds()
+            await db.commit()
+            return _build_response(run_id, chemical, run, [], 0, 0, 0)
+
+        _t0_mono = time.monotonic()
+        paper_found_time = datetime.utcnow()
+        for pos, paper in enumerate(papers, 1):
+            pdf_urls         = paper.get("pdf_urls", [])
+            has_pdf_from_api = paper.get("has_pdf_from_api", False)
+            if has_pdf_from_api:
+                papers_with_pdf += 1
+            db.add(PmcActivityLog(
+                run_id          = run_id,
+                chemical        = chemical,
+                log_type        = "paper_found",
+                logged_at       = paper_found_time,
+                sort_order      = pos * 1000,
+                pmcid           = paper["pmcid"],
+                pmid            = paper.get("pmid"),
+                doi             = paper.get("doi"),
+                title           = paper.get("title"),
+                abstract        = paper.get("abstract"),
+                authors         = ", ".join(paper.get("authors", [])),
+                journal         = paper.get("journal"),
+                year            = paper.get("year"),
+                epmc_url        = paper.get("epmc_url"),
+                result_position = pos,
+                has_pdf_urls    = has_pdf_from_api,
+                pdf_url_count   = paper.get("api_pdf_url_count", 0),
+                pdf_urls_list   = "\n".join(pdf_urls),
+            ))
+
+        # Pick papers to download (skip no-URL papers, fill slots up to max_pdfs)
+        dl_budget  = req.max_pdfs
+        to_download: list[tuple[int, dict]] = []
+        for orig_pos, paper in enumerate(papers, 1):
+            if paper.get("pdf_urls") and dl_budget > 0:
+                to_download.append((orig_pos, paper))
+                dl_budget -= 1
+
+        sem = asyncio.Semaphore(2)
+
+        async def dl_pmc(orig_pos: int, p: dict) -> tuple:
+            async with sem:
+                result = await _pmc_download_pdf(
+                    pmcid    = p["pmcid"] or "unknown",
+                    pmid     = p.get("pmid") or "unknown",
+                    pdf_urls = p["pdf_urls"],
+                    pdf_dir  = PDF_DIR_PMC,
+                )
+                mono_now = time.monotonic()
+                for i, att in enumerate(result.get("attempts", [])):
+                    elapsed = mono_now + i * 0.001
+                    att["attempted_at"] = paper_found_time + timedelta(
+                        seconds=elapsed - _t0_mono)
+                return orig_pos, result
+
+        dl_map: dict[int, dict] = dict(
+            await asyncio.gather(*[dl_pmc(pos, p) for pos, p in to_download])
+        )
+
+        for pos, paper in enumerate(papers, 1):
+            if not paper.get("pdf_urls"):
+                result  = {"status": "no_url", "attempts": []}
+                pdfs_no_url += 1
+            elif pos in dl_map:
+                result   = dl_map[pos]
+                status   = result["status"]
+                attempts = result.get("attempts", [])
+                total_urls_tried   += len(attempts)
+                total_urls_success += sum(1 for a in attempts if a["success"])
+                if status == "success":
+                    pdfs_ok += 1
+                else:
+                    pdfs_fail += 1
+                for att in attempts:
+                    db.add(PmcActivityLog(
+                        run_id          = run_id,
+                        chemical        = chemical,
+                        log_type        = "url_attempt",
+                        logged_at       = att["attempted_at"],
+                        sort_order      = pos * 1000 + att["attempt_no"],
+                        pmcid           = paper["pmcid"],
+                        pmid            = paper.get("pmid"),
+                        title           = paper.get("title"),
+                        result_position = pos,
+                        url             = att["url"],
+                        attempt_no      = att["attempt_no"],
+                        http_status     = att["http_status"],
+                        content_type    = att["content_type"],
+                        is_pdf          = att["is_pdf"],
+                        success         = att["success"],
+                        file_size_kb    = att["file_size_kb"],
+                        error           = att["error"],
+                    ))
+                if status == "success":
+                    db.add(PmcPaper(
+                        run_id          = run_id,
+                        chemical        = chemical,
+                        pmcid           = paper["pmcid"],
+                        pmid            = paper.get("pmid"),
+                        doi             = paper.get("doi"),
+                        title           = paper.get("title"),
+                        journal         = paper.get("journal"),
+                        year            = paper.get("year"),
+                        epmc_url        = paper.get("epmc_url"),
+                        result_position = pos,
+                        pdf_url         = result.get("pdf_source"),
+                        pdf_path        = result.get("pdf_path"),
+                        file_size_kb    = result.get("file_size_kb"),
+                    ))
+            else:
+                result = {"status": "skipped"}
+                pdfs_skip += 1
+
+            papers_out.append(_paper_out(paper, result, pos))
+
+        finished = datetime.utcnow()
+        run.finished_at        = finished
+        run.duration_s         = (finished - started).total_seconds()
+        run.papers_with_pdf    = papers_with_pdf
+        run.pdfs_success       = pdfs_ok
+        run.pdfs_failed        = pdfs_fail
+        run.pdfs_skipped       = pdfs_skip + pdfs_no_url
+        run.total_urls_tried   = total_urls_tried
+        run.total_urls_success = total_urls_success
+        run.status = (
+            "success"  if pdfs_ok > 0
+            else "no_pdfs"  if papers
+            else "no_results"
+        )
+
+    except Exception as e:
+        finished = datetime.utcnow()
+        run.finished_at = finished
+        run.duration_s  = (finished - started).total_seconds()
+        run.status = "failed"
+        run.error  = str(e)
+
+    await db.commit()
+    return _build_response(run_id, chemical, run, papers_out,
+                           pdfs_ok, pdfs_fail, pdfs_skip, pdfs_no_url)
+
+
+# ── GET /api/pmc/runs ─────────────────────────────────────────────────────────
+@app.get("/api/pmc/runs")
+async def pmc_list_runs(db: AsyncSession = Depends(get_db)):
+    rows = (await db.execute(
+        select(PmcRun).order_by(desc(PmcRun.started_at)).limit(100)
+    )).scalars().all()
+    return [_pmc_run_dict(r) for r in rows]
+
+
 # ── GET /api/runs ─────────────────────────────────────────────────────────────
 @app.get("/api/runs")
 async def list_runs(db: AsyncSession = Depends(get_db)):
@@ -387,6 +596,20 @@ def _build_response(run_id, chemical, run, papers_out, ok, fail, skip, no_url=0)
             "finished_at":  str(run.finished_at),
         },
         "papers": saved_papers,
+    }
+
+
+def _pmc_run_dict(r: PmcRun) -> dict:
+    return {
+        "run_id":       r.run_id,
+        "chemical":     r.chemical,
+        "status":       r.status,
+        "started_at":   str(r.started_at),
+        "finished_at":  str(r.finished_at),
+        "duration_s":   r.duration_s,
+        "pdfs_success": r.pdfs_success,
+        "pdfs_failed":  r.pdfs_failed,
+        "error":        r.error,
     }
 
 

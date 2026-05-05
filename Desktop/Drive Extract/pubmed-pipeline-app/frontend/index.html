@@ -3,217 +3,288 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>EuropePMC Pipeline</title>
+  <title>PDF Pipeline</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #0f1117; color: #e2e8f0; min-height: 100vh; }
 
-    header { background: #1a1d27; border-bottom: 1px solid #2d3148; padding: 18px 32px; display: flex; align-items: center; gap: 12px; }
-    header h1 { font-size: 1.2rem; font-weight: 600; color: #a78bfa; }
-    header span { font-size: 0.8rem; color: #64748b; }
+    header { background: #1a1d27; border-bottom: 1px solid #2d3148; padding: 16px 32px; display: flex; align-items: center; gap: 12px; }
+    header h1 { font-size: 1.15rem; font-weight: 600; color: #a78bfa; }
+    header span { font-size: 0.78rem; color: #475569; }
 
-    .container { max-width: 960px; margin: 0 auto; padding: 32px 24px; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 28px 24px; }
 
-    /* ── Search card ── */
-    .search-card { background: #1a1d27; border: 1px solid #2d3148; border-radius: 12px; padding: 28px; margin-bottom: 28px; }
-    .search-card h2 { font-size: 0.85rem; color: #64748b; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 16px; }
-    .input-row { display: flex; gap: 12px; }
-    .input-row input { flex: 1; background: #0f1117; border: 1px solid #2d3148; border-radius: 8px; padding: 12px 16px; font-size: 1rem; color: #e2e8f0; outline: none; transition: border-color 0.2s; }
-    .input-row input:focus { border-color: #7c3aed; }
-    .input-row input::placeholder { color: #475569; }
-    .options-row { display: flex; gap: 24px; margin-top: 14px; align-items: flex-end; }
-    .options-row label { font-size: 0.82rem; color: #64748b; display: flex; flex-direction: column; gap: 5px; }
-    .options-row input[type=number] { background: #0f1117; border: 1px solid #2d3148; border-radius: 6px; padding: 7px 10px; color: #e2e8f0; font-size: 0.9rem; width: 80px; }
-    button.run-btn { background: #7c3aed; color: #fff; border: none; border-radius: 8px; padding: 12px 32px; font-size: 1rem; font-weight: 600; cursor: pointer; transition: background 0.2s; white-space: nowrap; }
-    button.run-btn:hover:not(:disabled) { background: #6d28d9; }
-    button.run-btn:disabled { background: #3b3f5c; cursor: not-allowed; }
+    /* ── Search bar ── */
+    .search-card { background: #1a1d27; border: 1px solid #2d3148; border-radius: 12px; padding: 24px 28px; margin-bottom: 24px; }
+    .search-row { display: flex; gap: 12px; align-items: center; }
+    .search-row input[type=text] { flex: 1; background: #0f1117; border: 1px solid #2d3148; border-radius: 8px; padding: 11px 16px; font-size: 1rem; color: #e2e8f0; outline: none; transition: border-color 0.2s; }
+    .search-row input[type=text]:focus { border-color: #7c3aed; }
+    .search-row input[type=text]::placeholder { color: #475569; }
+    .run-btn { background: #7c3aed; color: #fff; border: none; border-radius: 8px; padding: 11px 32px; font-size: 0.95rem; font-weight: 600; cursor: pointer; transition: background 0.2s; white-space: nowrap; }
+    .run-btn:hover:not(:disabled) { background: #6d28d9; }
+    .run-btn:disabled { background: #3b3f5c; cursor: not-allowed; }
 
-    /* ── Status bar ── */
-    #status-bar { display: none; background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 12px 18px; margin-bottom: 20px; font-size: 0.88rem; color: #94a3b8; }
+    /* ── Two-panel grid ── */
+    .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    @media (max-width: 860px) { .panels { grid-template-columns: 1fr; } }
+
+    .panel { background: #1a1d27; border: 1px solid #2d3148; border-radius: 12px; overflow: hidden; }
+    .panel-header { padding: 14px 20px; border-bottom: 1px solid #2d3148; display: flex; align-items: center; justify-content: space-between; }
+    .panel-header .db-name { font-size: 0.9rem; font-weight: 700; }
+    .panel-header .db-name.epmc { color: #60a5fa; }
+    .panel-header .db-name.pmc  { color: #34d399; }
+    .panel-header label { font-size: 0.78rem; color: #64748b; display: flex; align-items: center; gap: 8px; }
+    .panel-header input[type=number] { background: #0f1117; border: 1px solid #2d3148; border-radius: 6px; padding: 5px 8px; color: #e2e8f0; font-size: 0.85rem; width: 58px; outline: none; }
+    .panel-body { padding: 16px 20px; min-height: 120px; }
+
+    /* ── Status ── */
+    .status-bar { font-size: 0.82rem; color: #94a3b8; padding: 8px 12px; background: #0f1117; border-radius: 6px; margin-bottom: 14px; display: none; }
 
     /* ── Summary chips ── */
-    .summary-grid { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 28px; }
-    .chip { background: #1a1d27; border: 1px solid #2d3148; border-radius: 10px; padding: 14px 20px; min-width: 130px; }
-    .chip .label { font-size: 0.7rem; color: #64748b; text-transform: uppercase; letter-spacing: .06em; }
-    .chip .value { font-size: 1.5rem; font-weight: 700; margin-top: 5px; }
-    .chip.green .value  { color: #4ade80; }
-    .chip.red .value    { color: #f87171; }
-    .chip.amber .value  { color: #fbbf24; }
-    .chip.gray .value   { color: #94a3b8; }
-
-    /* ── Section title ── */
-    .section-title { font-size: 0.78rem; color: #475569; text-transform: uppercase; letter-spacing: .1em; margin-bottom: 12px; margin-top: 4px; }
+    .chips { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+    .chip { border-radius: 8px; padding: 10px 14px; min-width: 90px; background: #0f1117; border: 1px solid #1e293b; }
+    .chip .lbl { font-size: 0.65rem; color: #475569; text-transform: uppercase; letter-spacing: .06em; }
+    .chip .val { font-size: 1.25rem; font-weight: 700; margin-top: 3px; }
+    .chip.green .val { color: #4ade80; }
+    .chip.red   .val { color: #f87171; }
+    .chip.gray  .val { color: #94a3b8; }
 
     /* ── Paper cards ── */
-    .paper-card { background: #1a1d27; border: 1px solid #2d3148; border-radius: 10px; padding: 15px 18px; margin-bottom: 8px; display: flex; gap: 14px; align-items: flex-start; transition: border-color 0.15s; }
-    .paper-card:hover { border-color: #3d4268; }
-    .badge { min-width: 90px; text-align: center; padding: 4px 8px; border-radius: 6px; font-size: 0.72rem; font-weight: 700; letter-spacing: .03em; white-space: nowrap; margin-top: 2px; }
-    .badge.success { background: #052e16; color: #4ade80; border: 1px solid #166534; }
-    .badge.failed  { background: #2d0a0a; color: #f87171; border: 1px solid #7f1d1d; }
-    .badge.no_url  { background: #1c1917; color: #78716c; border: 1px solid #292524; }
-    .badge.skipped { background: #0f172a; color: #475569; border: 1px solid #1e293b; }
-    .paper-info { flex: 1; min-width: 0; }
-    .paper-info .title { font-size: 0.93rem; font-weight: 600; color: #e2e8f0; margin-bottom: 5px; line-height: 1.45; }
-    .paper-info .meta  { font-size: 0.77rem; color: #64748b; line-height: 1.6; }
+    .section-lbl { font-size: 0.7rem; color: #475569; text-transform: uppercase; letter-spacing: .1em; margin-bottom: 10px; }
+    .paper-card { border: 1px solid #1e293b; border-radius: 8px; padding: 12px 14px; margin-bottom: 7px; display: flex; gap: 12px; align-items: flex-start; background: #0f1117; }
+    .paper-card:hover { border-color: #334155; }
+    .num { min-width: 26px; height: 26px; border-radius: 6px; background: #052e16; border: 1px solid #166534; color: #4ade80; font-size: 0.72rem; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
+    .paper-info .title { font-size: 0.88rem; font-weight: 600; color: #e2e8f0; margin-bottom: 4px; line-height: 1.4; }
+    .paper-info .meta  { font-size: 0.74rem; color: #475569; line-height: 1.6; }
     .paper-info .meta a { color: #818cf8; text-decoration: none; }
     .paper-info .meta a:hover { text-decoration: underline; }
-    .paper-info .ids   { font-size: 0.73rem; color: #374151; margin-top: 3px; font-family: monospace; }
-    .pos-badge { display: inline-block; background: #1e293b; color: #64748b; font-size: 0.68rem; border-radius: 4px; padding: 1px 6px; margin-right: 6px; font-weight: 600; }
+    .paper-info .ids   { font-size: 0.7rem; color: #334155; margin-top: 2px; font-family: monospace; }
+    .empty-msg { color: #374151; font-size: 0.82rem; text-align: center; padding: 24px 0; }
 
     /* ── History ── */
-    #history-section { margin-top: 40px; }
-    .run-row { background: #1a1d27; border: 1px solid #2d3148; border-radius: 8px; padding: 12px 18px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; transition: border-color 0.15s; }
+    .history-section { margin-top: 28px; }
+    .section-title { font-size: 0.72rem; color: #475569; text-transform: uppercase; letter-spacing: .1em; margin-bottom: 10px; }
+    .history-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    @media (max-width: 860px) { .history-grid { grid-template-columns: 1fr; } }
+    .run-row { background: #1a1d27; border: 1px solid #2d3148; border-radius: 7px; padding: 10px 14px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; }
     .run-row:hover { border-color: #7c3aed; }
-    .run-row .chem { font-weight: 600; font-size: 0.95rem; }
-    .run-row .meta { font-size: 0.77rem; color: #64748b; margin-top: 3px; }
-    .run-badge { font-size: 0.73rem; padding: 3px 10px; border-radius: 5px; font-weight: 700; white-space: nowrap; }
+    .run-row .chem { font-weight: 600; font-size: 0.88rem; }
+    .run-row .meta { font-size: 0.73rem; color: #475569; margin-top: 2px; }
+    .run-badge { font-size: 0.7rem; padding: 2px 9px; border-radius: 4px; font-weight: 700; }
 
-    /* ── Spinner ── */
-    .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #4b5563; border-top-color: #7c3aed; border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; margin-right: 8px; }
+    .spinner { display: inline-block; width: 13px; height: 13px; border: 2px solid #4b5563; border-top-color: #7c3aed; border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; margin-right: 6px; }
     @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
 
 <header>
-  <h1>EuropePMC Pipeline</h1>
-  <span>Search · trace · download</span>
+  <h1>PDF Pipeline</h1>
+  <span>EuropePMC &amp; PubMed Central — parallel search</span>
 </header>
 
 <div class="container">
 
+  <!-- Search bar -->
   <div class="search-card">
-    <h2>Chemical Search</h2>
-    <div class="input-row">
-      <input id="chemical-input" type="text" placeholder="e.g. Benzene, Toluene, Formaldehyde…" />
-      <button class="run-btn" id="run-btn" onclick="runPipeline()">Run</button>
-    </div>
-    <div class="options-row">
-      <label>PDFs to download
-        <input type="number" id="max-pdfs" value="10" min="1" max="25" />
-      </label>
+    <div class="search-row">
+      <input type="text" id="chemical-input" placeholder="Enter chemical name  e.g. Benzene, Toluene, Formaldehyde…" />
+      <button class="run-btn" id="run-btn" onclick="runBoth()">Run Both</button>
     </div>
   </div>
 
-  <div id="status-bar"></div>
-  <div id="summary-grid" class="summary-grid" style="display:none"></div>
+  <!-- Two panels -->
+  <div class="panels">
 
-  <div id="results-section" style="display:none">
-    <div class="section-title">Downloaded PDFs</div>
-    <div id="papers-list"></div>
+    <!-- EuropePMC panel -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="db-name epmc">EuropePMC</span>
+        <label>PDFs to download
+          <input type="number" id="epmc-max-pdfs" value="10" min="1" max="25" />
+        </label>
+      </div>
+      <div class="panel-body">
+        <div class="status-bar" id="epmc-status"></div>
+        <div class="chips" id="epmc-chips" style="display:none"></div>
+        <div id="epmc-results"></div>
+      </div>
+    </div>
+
+    <!-- PMC panel -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="db-name pmc">PubMed Central</span>
+        <label>PDFs to download
+          <input type="number" id="pmc-max-pdfs" value="10" min="1" max="25" />
+        </label>
+      </div>
+      <div class="panel-body">
+        <div class="status-bar" id="pmc-status"></div>
+        <div class="chips" id="pmc-chips" style="display:none"></div>
+        <div id="pmc-results"></div>
+      </div>
+    </div>
+
   </div>
 
-  <div id="history-section">
+  <!-- History -->
+  <div class="history-section">
     <div class="section-title">Recent Runs</div>
-    <div id="history-list"><span style="color:#475569;font-size:.85rem">Loading…</span></div>
+    <div class="history-grid">
+      <div>
+        <div style="font-size:0.72rem;color:#60a5fa;margin-bottom:8px;font-weight:600">EUROPEPMC</div>
+        <div id="epmc-history"><span class="empty-msg">Loading…</span></div>
+      </div>
+      <div>
+        <div style="font-size:0.72rem;color:#34d399;margin-bottom:8px;font-weight:600">PUBMED CENTRAL</div>
+        <div id="pmc-history"><span class="empty-msg">Loading…</span></div>
+      </div>
+    </div>
   </div>
 
 </div>
 
 <script>
-async function runPipeline() {
+// ── Run both pipelines simultaneously, each updates its panel independently ──
+function runBoth() {
   const chemical = document.getElementById("chemical-input").value.trim();
   if (!chemical) { alert("Please enter a chemical name."); return; }
-  const maxPdfs = parseInt(document.getElementById("max-pdfs").value) || 10;
 
-  setStatus("running", `Searching for "${chemical}" PDFs…`);
   document.getElementById("run-btn").disabled = true;
-  document.getElementById("summary-grid").style.display = "none";
-  document.getElementById("results-section").style.display = "none";
-  document.getElementById("papers-list").innerHTML = "";
 
-  try {
-    const res  = await fetch("/api/run", {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ chemical, max_pdfs: maxPdfs }),
-    });
-    const data = await res.json();
-    renderSummary(data);
-    renderPapers(data.papers || []);
-    const s = data.summary || {};
-    setStatus(data.status,
-      `Run ${data.run_id} · ${s.pdfs_success} PDFs saved · ${s.pdfs_failed} failed · ${(s.duration_s || 0).toFixed(1)}s`);
-    loadHistory();
-  } catch (err) {
-    setStatus("failed", "Error: " + err.message);
-  } finally {
+  const epmcPdfs = parseInt(document.getElementById("epmc-max-pdfs").value) || 10;
+  const pmcPdfs  = parseInt(document.getElementById("pmc-max-pdfs").value)  || 10;
+
+  // Reset both panels
+  resetPanel("epmc");
+  resetPanel("pmc");
+
+  // Fire both independently — each updates as soon as its response arrives
+  runPanel("epmc", "/api/run",     { chemical, max_pdfs: epmcPdfs })
+    .finally(() => checkBothDone());
+  runPanel("pmc",  "/api/pmc/run", { chemical, max_pdfs: pmcPdfs  })
+    .finally(() => checkBothDone());
+}
+
+let _pending = 0;
+function resetPanel(id) {
+  setStatus(id, "running", `Searching…`);
+  document.getElementById(`${id}-chips`).style.display   = "none";
+  document.getElementById(`${id}-results`).innerHTML     = "";
+  _pending++;
+}
+function checkBothDone() {
+  _pending--;
+  if (_pending <= 0) {
     document.getElementById("run-btn").disabled = false;
+    _pending = 0;
   }
 }
 
-function setStatus(state, msg) {
-  const el   = document.getElementById("status-bar");
+async function runPanel(id, url, body) {
+  try {
+    const res  = await fetch(url, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify(body),
+    });
+    const data = await res.json();
+    const s    = data.summary || {};
+
+    renderChips(id, s);
+    renderPapers(id, data.papers || []);
+    setStatus(id, data.status,
+      `Run ${data.run_id} · ${s.pdfs_success ?? 0} saved · ${s.pdfs_failed ?? 0} failed · ${(s.duration_s || 0).toFixed(1)}s`);
+
+    loadHistory();
+  } catch (err) {
+    setStatus(id, "failed", "Error: " + err.message);
+  }
+}
+
+function setStatus(id, state, msg) {
+  const el   = document.getElementById(`${id}-status`);
   const icon = state === "running" ? `<span class="spinner"></span>`
              : state === "success" ? "✅ "
              : state === "failed"  ? "❌ " : "⚠️ ";
-  el.innerHTML = icon + msg;
-  el.style.display = "block";
+  el.innerHTML      = icon + msg;
+  el.style.display  = "block";
 }
 
-function renderSummary(data) {
-  const s    = data.summary || {};
-  const grid = document.getElementById("summary-grid");
-  grid.style.display = "flex";
-  grid.innerHTML = `
-    <div class="chip green"> <div class="label">PDFs Saved</div>     <div class="value">${s.pdfs_success ?? 0}</div></div>
-    <div class="chip red">   <div class="label">Download Failed</div><div class="value">${s.pdfs_failed  ?? 0}</div></div>
-    <div class="chip gray">  <div class="label">Duration</div>       <div class="value">${(s.duration_s || 0).toFixed(1)}s</div></div>
+function renderChips(id, s) {
+  const el = document.getElementById(`${id}-chips`);
+  el.style.display = "flex";
+  el.innerHTML = `
+    <div class="chip green"><div class="lbl">PDFs Saved</div>    <div class="val">${s.pdfs_success ?? 0}</div></div>
+    <div class="chip red">  <div class="lbl">Failed</div>        <div class="val">${s.pdfs_failed  ?? 0}</div></div>
+    <div class="chip gray"> <div class="lbl">Duration</div>      <div class="val">${(s.duration_s || 0).toFixed(1)}s</div></div>
   `;
 }
 
-function renderPapers(papers) {
-  const list = document.getElementById("papers-list");
-  const sec  = document.getElementById("results-section");
-  if (!papers.length) { sec.style.display = "none"; return; }
-  sec.style.display = "block";
-  list.innerHTML = papers.map((p, i) => {
-    const meta  = [p.journal, p.year].filter(Boolean).join(" · ");
-    const fname = p.pdf_path ? p.pdf_path.split(/[\\/]/).pop() : null;
-    const size  = p.file_size_kb ? ` · ${p.file_size_kb} KB` : "";
-    const links = [
-      p.epmc_url ? `<a href="${p.epmc_url}" target="_blank">EuropePMC</a>` : "",
-      p.doi      ? `<a href="https://doi.org/${p.doi}" target="_blank">DOI</a>` : "",
-      fname      ? `<a href="/pdfs/${fname}" target="_blank">⬇ Download${size}</a>` : "",
-    ].filter(Boolean).join("  ·  ");
-    const ids = p.pmcid ? `${p.pmcid}${p.pmid ? "  ·  PMID " + p.pmid : ""}` : "";
-    return `
-      <div class="paper-card">
-        <div class="badge success">${i + 1}</div>
+function renderPapers(id, papers) {
+  const el = document.getElementById(`${id}-results`);
+  if (!papers.length) {
+    el.innerHTML = `<div class="empty-msg">No PDFs found</div>`;
+    return;
+  }
+  // Map panel id → PDF subfolder
+  const pdfBase = id === "epmc" ? "/pdfs/europepmc" : "/pdfs/pmc";
+  el.innerHTML = `<div class="section-lbl">Downloaded PDFs</div>` +
+    papers.map((p, i) => {
+      const meta  = [p.journal, p.year].filter(Boolean).join(" · ");
+      const fname = p.pdf_path ? p.pdf_path.split(/[\\/]/).pop() : null;
+      const size  = p.file_size_kb ? ` · ${p.file_size_kb} KB` : "";
+      const links = [
+        p.epmc_url ? `<a href="${p.epmc_url}" target="_blank">View</a>` : "",
+        p.doi      ? `<a href="https://doi.org/${p.doi}" target="_blank">DOI</a>` : "",
+        fname      ? `<a href="${pdfBase}/${fname}" target="_blank">⬇ PDF${size}</a>` : "",
+      ].filter(Boolean).join("  ·  ");
+      const ids = p.pmcid ? `${p.pmcid}${p.pmid ? "  ·  PMID " + p.pmid : ""}` : "";
+      return `<div class="paper-card">
+        <div class="num">${i + 1}</div>
         <div class="paper-info">
           <div class="title">${p.title || "(No title)"}</div>
           ${meta || links ? `<div class="meta">${[meta, links].filter(Boolean).join("  ·  ")}</div>` : ""}
           ${ids ? `<div class="ids">${ids}</div>` : ""}
         </div>
       </div>`;
-  }).join("");
+    }).join("");
 }
 
 async function loadHistory() {
   try {
-    const runs = await (await fetch("/api/runs")).json();
-    const list = document.getElementById("history-list");
-    if (!runs.length) { list.innerHTML = `<span style="color:#475569;font-size:.85rem">No runs yet.</span>`; return; }
-    list.innerHTML = runs.map(r => {
-      const col = r.status === "success" ? "#4ade80" : r.status === "failed" ? "#f87171" : "#94a3b8";
-      const bg  = r.status === "success" ? "#052e16" : r.status === "failed" ? "#2d0a0a" : "#1e293b";
-      const dur = r.duration_s ? r.duration_s.toFixed(1) + "s" : "—";
-      const dt  = r.started_at ? new Date(r.started_at).toLocaleString() : "";
-      return `<div class="run-row">
-        <div>
-          <div class="chem">${r.chemical}</div>
-          <div class="meta">${r.run_id} &nbsp;·&nbsp; ${dt} &nbsp;·&nbsp; ${dur} &nbsp;·&nbsp; ${r.pdfs_success ?? 0} PDFs saved</div>
-        </div>
-        <span class="run-badge" style="background:${bg};color:${col}">${r.status}</span>
-      </div>`;
-    }).join("");
+    const [epmcRuns, pmcRuns] = await Promise.all([
+      fetch("/api/runs").then(r => r.json()),
+      fetch("/api/pmc/runs").then(r => r.json()),
+    ]);
+    renderHistory("epmc-history", epmcRuns);
+    renderHistory("pmc-history",  pmcRuns);
   } catch (_) {}
+}
+
+function renderHistory(elId, runs) {
+  const el = document.getElementById(elId);
+  if (!runs.length) { el.innerHTML = `<span class="empty-msg">No runs yet.</span>`; return; }
+  el.innerHTML = runs.slice(0, 8).map(r => {
+    const col = r.status === "success" ? "#4ade80" : r.status === "failed" ? "#f87171" : "#94a3b8";
+    const bg  = r.status === "success" ? "#052e16" : r.status === "failed" ? "#2d0a0a" : "#1e293b";
+    const dur = r.duration_s ? r.duration_s.toFixed(1) + "s" : "—";
+    const dt  = r.started_at ? new Date(r.started_at).toLocaleString() : "";
+    return `<div class="run-row">
+      <div>
+        <div class="chem">${r.chemical}</div>
+        <div class="meta">${r.run_id} · ${dt} · ${dur} · ${r.pdfs_success ?? 0} PDFs saved</div>
+      </div>
+      <span class="run-badge" style="background:${bg};color:${col}">${r.status}</span>
+    </div>`;
+  }).join("");
 }
 
 document.addEventListener("DOMContentLoaded", () => {
   loadHistory();
   document.getElementById("chemical-input").addEventListener("keydown", e => {
-    if (e.key === "Enter") runPipeline();
+    if (e.key === "Enter") runBoth();
   });
 });
 </script>
