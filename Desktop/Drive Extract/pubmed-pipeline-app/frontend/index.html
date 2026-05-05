@@ -24,15 +24,17 @@
     .run-btn:hover:not(:disabled) { background: #6d28d9; }
     .run-btn:disabled { background: #3b3f5c; cursor: not-allowed; }
 
-    /* ── Two-panel grid ── */
-    .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-    @media (max-width: 860px) { .panels { grid-template-columns: 1fr; } }
+    /* ── Three-panel grid ── */
+    .panels { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
+    @media (max-width: 1100px) { .panels { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 680px)  { .panels { grid-template-columns: 1fr; } }
 
     .panel { background: #1a1d27; border: 1px solid #2d3148; border-radius: 12px; overflow: hidden; }
     .panel-header { padding: 14px 20px; border-bottom: 1px solid #2d3148; display: flex; align-items: center; justify-content: space-between; }
     .panel-header .db-name { font-size: 0.9rem; font-weight: 700; }
     .panel-header .db-name.epmc { color: #60a5fa; }
     .panel-header .db-name.pmc  { color: #34d399; }
+    .panel-header .db-name.ss   { color: #fb923c; }
     .panel-header label { font-size: 0.78rem; color: #64748b; display: flex; align-items: center; gap: 8px; }
     .panel-header input[type=number] { background: #0f1117; border: 1px solid #2d3148; border-radius: 6px; padding: 5px 8px; color: #e2e8f0; font-size: 0.85rem; width: 58px; outline: none; }
     .panel-body { padding: 16px 20px; min-height: 120px; }
@@ -64,8 +66,9 @@
     /* ── History ── */
     .history-section { margin-top: 28px; }
     .section-title { font-size: 0.72rem; color: #475569; text-transform: uppercase; letter-spacing: .1em; margin-bottom: 10px; }
-    .history-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-    @media (max-width: 860px) { .history-grid { grid-template-columns: 1fr; } }
+    .history-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
+    @media (max-width: 1100px) { .history-grid { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 680px)  { .history-grid { grid-template-columns: 1fr; } }
     .run-row { background: #1a1d27; border: 1px solid #2d3148; border-radius: 7px; padding: 10px 14px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; }
     .run-row:hover { border-color: #7c3aed; }
     .run-row .chem { font-weight: 600; font-size: 0.88rem; }
@@ -80,7 +83,7 @@
 
 <header>
   <h1>PDF Pipeline</h1>
-  <span>EuropePMC &amp; PubMed Central — parallel search</span>
+  <span>EuropePMC · PubMed Central · Semantic Scholar — parallel search</span>
 </header>
 
 <div class="container">
@@ -89,7 +92,7 @@
   <div class="search-card">
     <div class="search-row">
       <input type="text" id="chemical-input" placeholder="Enter chemical name  e.g. Benzene, Toluene, Formaldehyde…" />
-      <button class="run-btn" id="run-btn" onclick="runBoth()">Run Both</button>
+      <button class="run-btn" id="run-btn" onclick="runAll()">Run All</button>
     </div>
   </div>
 
@@ -126,6 +129,21 @@
       </div>
     </div>
 
+    <!-- Semantic Scholar panel -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="db-name ss">Semantic Scholar</span>
+        <label>PDFs to download
+          <input type="number" id="ss-max-pdfs" value="10" min="1" max="25" />
+        </label>
+      </div>
+      <div class="panel-body">
+        <div class="status-bar" id="ss-status"></div>
+        <div class="chips" id="ss-chips" style="display:none"></div>
+        <div id="ss-results"></div>
+      </div>
+    </div>
+
   </div>
 
   <!-- History -->
@@ -140,14 +158,18 @@
         <div style="font-size:0.72rem;color:#34d399;margin-bottom:8px;font-weight:600">PUBMED CENTRAL</div>
         <div id="pmc-history"><span class="empty-msg">Loading…</span></div>
       </div>
+      <div>
+        <div style="font-size:0.72rem;color:#fb923c;margin-bottom:8px;font-weight:600">SEMANTIC SCHOLAR</div>
+        <div id="ss-history"><span class="empty-msg">Loading…</span></div>
+      </div>
     </div>
   </div>
 
 </div>
 
 <script>
-// ── Run both pipelines simultaneously, each updates its panel independently ──
-function runBoth() {
+// ── Run all three pipelines simultaneously ────────────────────────────────────
+function runAll() {
   const chemical = document.getElementById("chemical-input").value.trim();
   if (!chemical) { alert("Please enter a chemical name."); return; }
 
@@ -155,26 +177,27 @@ function runBoth() {
 
   const epmcPdfs = parseInt(document.getElementById("epmc-max-pdfs").value) || 10;
   const pmcPdfs  = parseInt(document.getElementById("pmc-max-pdfs").value)  || 10;
+  const ssPdfs   = parseInt(document.getElementById("ss-max-pdfs").value)   || 10;
 
-  // Reset both panels
+  // Reset all three panels
   resetPanel("epmc");
   resetPanel("pmc");
+  resetPanel("ss");
 
-  // Fire both independently — each updates as soon as its response arrives
-  runPanel("epmc", "/api/run",     { chemical, max_pdfs: epmcPdfs })
-    .finally(() => checkBothDone());
-  runPanel("pmc",  "/api/pmc/run", { chemical, max_pdfs: pmcPdfs  })
-    .finally(() => checkBothDone());
+  // Fire all three independently — each updates as soon as its response arrives
+  runPanel("epmc", "/api/run",     { chemical, max_pdfs: epmcPdfs }).finally(() => checkAllDone());
+  runPanel("pmc",  "/api/pmc/run", { chemical, max_pdfs: pmcPdfs  }).finally(() => checkAllDone());
+  runPanel("ss",   "/api/ss/run",  { chemical, max_pdfs: ssPdfs   }).finally(() => checkAllDone());
 }
 
 let _pending = 0;
 function resetPanel(id) {
   setStatus(id, "running", `Searching…`);
-  document.getElementById(`${id}-chips`).style.display   = "none";
-  document.getElementById(`${id}-results`).innerHTML     = "";
+  document.getElementById(`${id}-chips`).style.display = "none";
+  document.getElementById(`${id}-results`).innerHTML   = "";
   _pending++;
 }
-function checkBothDone() {
+function checkAllDone() {
   _pending--;
   if (_pending <= 0) {
     document.getElementById("run-btn").disabled = false;
@@ -229,7 +252,9 @@ function renderPapers(id, papers) {
     return;
   }
   // Map panel id → PDF subfolder
-  const pdfBase = id === "epmc" ? "/pdfs/europepmc" : "/pdfs/pmc";
+  const pdfBase = id === "epmc" ? "/pdfs/europepmc"
+                : id === "pmc"  ? "/pdfs/pmc"
+                :                 "/pdfs/semanticscholar";
   el.innerHTML = `<div class="section-lbl">Downloaded PDFs</div>` +
     papers.map((p, i) => {
       const meta  = [p.journal, p.year].filter(Boolean).join(" · ");
@@ -254,12 +279,14 @@ function renderPapers(id, papers) {
 
 async function loadHistory() {
   try {
-    const [epmcRuns, pmcRuns] = await Promise.all([
+    const [epmcRuns, pmcRuns, ssRuns] = await Promise.all([
       fetch("/api/runs").then(r => r.json()),
       fetch("/api/pmc/runs").then(r => r.json()),
+      fetch("/api/ss/runs").then(r => r.json()),
     ]);
     renderHistory("epmc-history", epmcRuns);
     renderHistory("pmc-history",  pmcRuns);
+    renderHistory("ss-history",   ssRuns);
   } catch (_) {}
 }
 
@@ -284,7 +311,7 @@ function renderHistory(elId, runs) {
 document.addEventListener("DOMContentLoaded", () => {
   loadHistory();
   document.getElementById("chemical-input").addEventListener("keydown", e => {
-    if (e.key === "Enter") runBoth();
+    if (e.key === "Enter") runAll();
   });
 });
 </script>
