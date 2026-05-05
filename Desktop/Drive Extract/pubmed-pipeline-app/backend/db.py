@@ -116,6 +116,11 @@ class ActivityLog(Base):
     chemical     = Column(String(256), nullable=True)
     log_type     = Column(String(32),  nullable=False, index=True)  # search / paper_found / url_attempt
     logged_at    = Column(DateTime,    default=datetime.utcnow)
+    # sort_order encodes display sequence within a run:
+    #   search        →  0
+    #   paper_found N →  N * 1000          (e.g. pos 1 = 1000, pos 2 = 2000)
+    #   url_attempt   →  N * 1000 + attempt_no  (e.g. paper 1, try 2 = 1002)
+    sort_order   = Column(Integer,     nullable=True, index=True)
 
     # ── search fields (log_type = "search") ──────────────────────────────────
     query_sent       = Column(Text,    nullable=True)   # full query string sent

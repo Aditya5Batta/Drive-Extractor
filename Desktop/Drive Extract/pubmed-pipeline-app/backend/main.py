@@ -91,12 +91,13 @@ async def run_pipeline(req: RunRequest, db: AsyncSession = Depends(get_db)):
         # ── Step 1: Search EuropePMC ──────────────────────────────────────────
         search_result = await _search(chemical, max_results=req.max_results)
 
-        # Log the search event — timestamp = moment search completed
+        # Log the search event — sort_order=0 so it always appears first
         db.add(ActivityLog(
             run_id           = run_id,
             chemical         = chemical,
             log_type         = "search",
             logged_at        = datetime.utcnow(),
+            sort_order       = 0,
             query_sent       = search_result["query_sent"],
             api_url          = search_result["api_url"],
             papers_returned  = search_result["papers_returned"],
@@ -130,6 +131,9 @@ async def run_pipeline(req: RunRequest, db: AsyncSession = Depends(get_db)):
                 chemical        = chemical,
                 log_type        = "paper_found",
                 logged_at       = paper_found_time,
+                # sort_order: pos*1000 → paper #1=1000, #2=2000, #3=3000 ...
+                # url_attempts for paper N get N*1000+attempt_no (1001, 1002, ...)
+                sort_order      = pos * 1000,
                 pmcid           = paper["pmcid"],
                 pmid            = paper.get("pmid"),
                 doi             = paper.get("doi"),
@@ -188,24 +192,30 @@ async def run_pipeline(req: RunRequest, db: AsyncSession = Depends(get_db)):
             total_urls_tried   += len(attempts)
             total_urls_success += sum(1 for a in attempts if a["success"])
 
-            # Log every URL attempt — each with its own real timestamp
+            # Log every URL attempt
+            # sort_order = pos*1000 + attempt_no  so they slot right after their paper:
+            #   paper #3  → sort_order 3000
+            #   url try 1 → sort_order 3001
+            #   url try 2 → sort_order 3002
             for att in attempts:
                 db.add(ActivityLog(
-                    run_id       = run_id,
-                    chemical     = chemical,
-                    log_type     = "url_attempt",
-                    logged_at    = att["attempted_at"],   # set in europepmc.py after sleep
-                    pmcid        = paper["pmcid"],
-                    pmid         = paper.get("pmid"),
-                    title        = paper.get("title"),
-                    url          = att["url"],
-                    attempt_no   = att["attempt_no"],
-                    http_status  = att["http_status"],
-                    content_type = att["content_type"],
-                    is_pdf       = att["is_pdf"],
-                    success      = att["success"],
-                    file_size_kb = att["file_size_kb"],
-                    error        = att["error"],
+                    run_id          = run_id,
+                    chemical        = chemical,
+                    log_type        = "url_attempt",
+                    logged_at       = att["attempted_at"],
+                    sort_order      = pos * 1000 + att["attempt_no"],
+                    pmcid           = paper["pmcid"],
+                    pmid            = paper.get("pmid"),
+                    title           = paper.get("title"),
+                    result_position = pos,
+                    url             = att["url"],
+                    attempt_no      = att["attempt_no"],
+                    http_status     = att["http_status"],
+                    content_type    = att["content_type"],
+                    is_pdf          = att["is_pdf"],
+                    success         = att["success"],
+                    file_size_kb    = att["file_size_kb"],
+                    error           = att["error"],
                 ))
 
             # Only successful downloads go into the clean papers table
@@ -298,7 +308,7 @@ async def get_logs(run_id: str, db: AsyncSession = Depends(get_db)):
     rows = (await db.execute(
         select(ActivityLog)
         .where(ActivityLog.run_id == run_id)
-        .order_by(ActivityLog.id)
+        .order_by(ActivityLog.sort_order, ActivityLog.id)
     )).scalars().all()
     return [_log_dict(r) for r in rows]
 
@@ -319,7 +329,7 @@ async def get_logs_papers(run_id: str, db: AsyncSession = Depends(get_db)):
     rows = (await db.execute(
         select(ActivityLog)
         .where(ActivityLog.run_id == run_id, ActivityLog.log_type == "paper_found")
-        .order_by(ActivityLog.result_position)
+        .order_by(ActivityLog.sort_order)
     )).scalars().all()
     return [_log_dict(r) for r in rows]
 
@@ -330,7 +340,7 @@ async def get_logs_urls(run_id: str, db: AsyncSession = Depends(get_db)):
     rows = (await db.execute(
         select(ActivityLog)
         .where(ActivityLog.run_id == run_id, ActivityLog.log_type == "url_attempt")
-        .order_by(ActivityLog.pmcid, ActivityLog.attempt_no)
+        .order_by(ActivityLog.sort_order)
     )).scalars().all()
     return [_log_dict(r) for r in rows]
 
@@ -408,6 +418,7 @@ def _paper_dict(p: Paper) -> dict:
 def _log_dict(r: ActivityLog) -> dict:
     return {
         "id":               r.id,
+        "sort_order":       r.sort_order,
         "log_type":         r.log_type,
         "chemical":         r.chemical,
         "logged_at":        str(r.logged_at),
