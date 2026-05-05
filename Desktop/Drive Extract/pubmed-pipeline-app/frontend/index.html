@@ -89,10 +89,7 @@
       <button class="run-btn" id="run-btn" onclick="runPipeline()">Run</button>
     </div>
     <div class="options-row">
-      <label>Max papers to search
-        <input type="number" id="max-results" value="50" min="1" max="100" />
-      </label>
-      <label>Max PDFs to download
+      <label>PDFs to download
         <input type="number" id="max-pdfs" value="10" min="1" max="25" />
       </label>
     </div>
@@ -102,7 +99,7 @@
   <div id="summary-grid" class="summary-grid" style="display:none"></div>
 
   <div id="results-section" style="display:none">
-    <div class="section-title">Results</div>
+    <div class="section-title">Downloaded PDFs</div>
     <div id="papers-list"></div>
   </div>
 
@@ -117,10 +114,9 @@
 async function runPipeline() {
   const chemical = document.getElementById("chemical-input").value.trim();
   if (!chemical) { alert("Please enter a chemical name."); return; }
-  const maxResults = parseInt(document.getElementById("max-results").value) || 25;
-  const maxPdfs    = parseInt(document.getElementById("max-pdfs").value)    || 10;
+  const maxPdfs = parseInt(document.getElementById("max-pdfs").value) || 10;
 
-  setStatus("running", `Searching EuropePMC for "${chemical}"…`);
+  setStatus("running", `Searching for "${chemical}" PDFs…`);
   document.getElementById("run-btn").disabled = true;
   document.getElementById("summary-grid").style.display = "none";
   document.getElementById("results-section").style.display = "none";
@@ -130,14 +126,14 @@ async function runPipeline() {
     const res  = await fetch("/api/run", {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ chemical, max_results: maxResults, max_pdfs: maxPdfs }),
+      body:    JSON.stringify({ chemical, max_pdfs: maxPdfs }),
     });
     const data = await res.json();
     renderSummary(data);
     renderPapers(data.papers || []);
     const s = data.summary || {};
     setStatus(data.status,
-      `Run ${data.run_id} · ${s.pdfs_success} saved · ${s.pdfs_failed} failed · ${s.pdfs_no_url ?? 0} no free PDF · ${(s.duration_s || 0).toFixed(1)}s`);
+      `Run ${data.run_id} · ${s.pdfs_success} PDFs saved · ${s.pdfs_failed} failed · ${(s.duration_s || 0).toFixed(1)}s`);
     loadHistory();
   } catch (err) {
     setStatus("failed", "Error: " + err.message);
@@ -160,11 +156,9 @@ function renderSummary(data) {
   const grid = document.getElementById("summary-grid");
   grid.style.display = "flex";
   grid.innerHTML = `
-    <div class="chip green"> <div class="label">PDFs Saved</div>    <div class="value">${s.pdfs_success ?? 0}</div></div>
+    <div class="chip green"> <div class="label">PDFs Saved</div>     <div class="value">${s.pdfs_success ?? 0}</div></div>
     <div class="chip red">   <div class="label">Download Failed</div><div class="value">${s.pdfs_failed  ?? 0}</div></div>
-    <div class="chip amber"> <div class="label">No Free PDF</div>   <div class="value">${s.pdfs_no_url  ?? 0}</div></div>
-    <div class="chip gray">  <div class="label">Skipped</div>       <div class="value">${s.pdfs_skipped ?? 0}</div></div>
-    <div class="chip gray">  <div class="label">Duration</div>      <div class="value">${(s.duration_s || 0).toFixed(1)}s</div></div>
+    <div class="chip gray">  <div class="label">Duration</div>       <div class="value">${(s.duration_s || 0).toFixed(1)}s</div></div>
   `;
 }
 
@@ -173,28 +167,21 @@ function renderPapers(papers) {
   const sec  = document.getElementById("results-section");
   if (!papers.length) { sec.style.display = "none"; return; }
   sec.style.display = "block";
-  list.innerHTML = papers.map(p => {
-    const status = p.pdf_status || "unknown";
-    const label  = status === "success" ? "PDF Saved"
-                 : status === "failed"  ? "Failed"
-                 : status === "no_url"  ? "No Free PDF"
-                 : status === "skipped" ? "Skipped"
-                 : status;
+  list.innerHTML = papers.map((p, i) => {
     const meta  = [p.journal, p.year].filter(Boolean).join(" · ");
     const fname = p.pdf_path ? p.pdf_path.split(/[\\/]/).pop() : null;
-    const size  = p.file_size_kb ? ` (${p.file_size_kb} KB)` : "";
+    const size  = p.file_size_kb ? ` · ${p.file_size_kb} KB` : "";
     const links = [
       p.epmc_url ? `<a href="${p.epmc_url}" target="_blank">EuropePMC</a>` : "",
       p.doi      ? `<a href="https://doi.org/${p.doi}" target="_blank">DOI</a>` : "",
-      fname      ? `<a href="/pdfs/${fname}" target="_blank">⬇ PDF${size}</a>` : "",
+      fname      ? `<a href="/pdfs/${fname}" target="_blank">⬇ Download${size}</a>` : "",
     ].filter(Boolean).join("  ·  ");
-    const pos  = p.result_position ? `<span class="pos-badge">#${p.result_position}</span>` : "";
-    const ids  = p.pmcid ? `${p.pmcid}${p.pmid ? "  ·  PMID " + p.pmid : ""}` : "";
+    const ids = p.pmcid ? `${p.pmcid}${p.pmid ? "  ·  PMID " + p.pmid : ""}` : "";
     return `
       <div class="paper-card">
-        <div class="badge ${status}">${label}</div>
+        <div class="badge success">${i + 1}</div>
         <div class="paper-info">
-          <div class="title">${pos}${p.title || "(No title)"}</div>
+          <div class="title">${p.title || "(No title)"}</div>
           ${meta || links ? `<div class="meta">${[meta, links].filter(Boolean).join("  ·  ")}</div>` : ""}
           ${ids ? `<div class="ids">${ids}</div>` : ""}
         </div>

@@ -66,9 +66,10 @@ if FRONTEND.exists():
 
 
 class RunRequest(BaseModel):
-    chemical:    str
-    max_results: int = 50
-    max_pdfs:    int = 10
+    chemical: str
+    max_pdfs: int = 10
+    # max_results is derived automatically — search wide enough to fill PDF slots
+    # (not exposed in UI; postgres still logs everything)
 
 
 # ── POST /api/run ─────────────────────────────────────────────────────────────
@@ -89,7 +90,10 @@ async def run_pipeline(req: RunRequest, db: AsyncSession = Depends(get_db)):
 
     try:
         # ── Step 1: Search EuropePMC ──────────────────────────────────────────
-        search_result = await _search(chemical, max_results=req.max_results)
+        # Search 10× more papers than PDFs needed so we have enough free ones.
+        # Postgres still logs every paper found — nothing hidden from the DB.
+        auto_max = min(req.max_pdfs * 10, 200)
+        search_result = await _search(chemical, max_results=auto_max)
 
         # Log the search event — sort_order=0 so it always appears first
         db.add(ActivityLog(
@@ -369,21 +373,20 @@ async def health(db: AsyncSession = Depends(get_db)):
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 def _build_response(run_id, chemical, run, papers_out, ok, fail, skip, no_url=0):
+    # Dashboard only shows successfully saved PDFs — everything else is in Postgres
+    saved_papers = [p for p in papers_out if p.get("pdf_status") == "success"]
     return {
         "run_id":   run_id,
         "chemical": chemical,
         "status":   run.status,
         "summary": {
-            "papers_found":    run.papers_found or 0,
-            "pdfs_success":    ok,
-            "pdfs_failed":     fail,
-            "pdfs_no_url":     no_url,   # no free PDF (paywalled)
-            "pdfs_skipped":    skip,     # beyond max_pdfs limit
-            "duration_s":      run.duration_s,
-            "started_at":      str(run.started_at),
-            "finished_at":     str(run.finished_at),
+            "pdfs_success": ok,
+            "pdfs_failed":  fail,
+            "duration_s":   run.duration_s,
+            "started_at":   str(run.started_at),
+            "finished_at":  str(run.finished_at),
         },
-        "papers": papers_out,
+        "papers": saved_papers,
     }
 
 
