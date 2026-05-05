@@ -1,15 +1,19 @@
 """
-PostgreSQL models — full traceability for EuropePMC pipeline runs.
-Tables: runs, papers
+PostgreSQL models — 3-table design for EuropePMC pipeline.
+
+Tables:
+  runs          — one row per pipeline execution (summary)
+  papers        — ONLY successful PDF downloads (clean, enriched data)
+  activity_logs — complete trace: search query, every paper scanned,
+                  every URL attempted (success or failure)
 """
 from __future__ import annotations
 import os
-from datetime import datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
 from sqlalchemy import (
-    Column, DateTime, Float, ForeignKey,
+    Boolean, Column, DateTime, Float, ForeignKey,
     Integer, String, Text, func,
 )
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -22,7 +26,7 @@ DATABASE_URL = os.getenv(
     "postgresql+asyncpg://postgres:12345@localhost:5432/europepmc_pipeline",
 )
 
-engine  = create_async_engine(DATABASE_URL, echo=False)
+engine            = create_async_engine(DATABASE_URL, echo=False)
 AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 
@@ -30,44 +34,114 @@ class Base(DeclarativeBase):
     pass
 
 
-# ── runs ──────────────────────────────────────────────────────────────────────
+# ── TABLE 1: runs ─────────────────────────────────────────────────────────────
 class Run(Base):
-    """One pipeline execution triggered by the user."""
+    """
+    One full pipeline execution.
+    Summary counters for quick dashboard display.
+    """
     __tablename__ = "runs"
 
-    id           = Column(Integer, primary_key=True, autoincrement=True)
-    run_id       = Column(String(32),  unique=True, nullable=False, index=True)
-    chemical     = Column(String(256), nullable=False)   # user input
-    started_at   = Column(DateTime,   default=func.now())
-    finished_at  = Column(DateTime,   nullable=True)
-    duration_s   = Column(Float,      nullable=True)     # seconds
-    papers_found = Column(Integer,    default=0)
-    pdfs_success = Column(Integer,    default=0)
-    pdfs_failed  = Column(Integer,    default=0)
-    pdfs_skipped = Column(Integer,    default=0)
-    status       = Column(String(32), default="started") # started/success/partial/failed
-    error        = Column(Text,       nullable=True)
+    id                 = Column(Integer, primary_key=True, autoincrement=True)
+    run_id             = Column(String(32),  unique=True, nullable=False, index=True)
+    chemical           = Column(String(256), nullable=False)
+    started_at         = Column(DateTime,    default=func.now())
+    finished_at        = Column(DateTime,    nullable=True)
+    duration_s         = Column(Float,       nullable=True)
+
+    # Search summary
+    papers_found       = Column(Integer, default=0)   # total papers EuropePMC returned
+    papers_with_pdf    = Column(Integer, default=0)   # papers that had at least one PDF URL
+
+    # Download summary
+    pdfs_success       = Column(Integer, default=0)   # successfully downloaded
+    pdfs_failed        = Column(Integer, default=0)   # tried but all URLs failed
+    pdfs_skipped       = Column(Integer, default=0)   # beyond max_pdfs limit
+
+    # URL-level summary
+    total_urls_tried   = Column(Integer, default=0)
+    total_urls_success = Column(Integer, default=0)
+
+    status             = Column(String(32), default="started")  # started/success/no_pdfs/no_results/failed
+    error              = Column(Text, nullable=True)
 
 
-# ── papers ────────────────────────────────────────────────────────────────────
+# ── TABLE 2: papers ───────────────────────────────────────────────────────────
 class Paper(Base):
-    """One paper found and processed during a run."""
+    """
+    ONLY successfully downloaded papers — clean reference table.
+    Every row means: we have a PDF for this paper.
+    """
     __tablename__ = "papers"
 
-    id          = Column(Integer, primary_key=True, autoincrement=True)
-    run_id      = Column(String(32), ForeignKey("runs.run_id"), nullable=False, index=True)
-    pmcid       = Column(String(32),  nullable=True)
-    pmid        = Column(String(32),  nullable=True)
-    title       = Column(Text,        nullable=True)
-    journal     = Column(String(256), nullable=True)
-    year        = Column(String(8),   nullable=True)
-    doi         = Column(String(128), nullable=True)
-    epmc_url    = Column(Text,        nullable=True)
-    pdf_status  = Column(String(32),  default="pending")  # success/failed/no_url
-    pdf_path    = Column(Text,        nullable=True)       # local file path
-    pdf_source  = Column(Text,        nullable=True)       # URL that worked
-    error_log   = Column(Text,        nullable=True)       # failure reasons
-    fetched_at  = Column(DateTime,    default=func.now())
+    id              = Column(Integer, primary_key=True, autoincrement=True)
+    run_id          = Column(String(32), ForeignKey("runs.run_id"), nullable=False, index=True)
+    chemical        = Column(String(256), nullable=False)   # chemical searched
+
+    # Paper identity
+    pmcid           = Column(String(32),  nullable=True, index=True)
+    pmid            = Column(String(32),  nullable=True, index=True)
+    doi             = Column(String(128), nullable=True)
+    title           = Column(Text,        nullable=True)
+    journal         = Column(String(256), nullable=True)
+    year            = Column(String(8),   nullable=True)
+    epmc_url        = Column(Text,        nullable=True)    # link to EuropePMC page
+
+    # Where in the search results this paper appeared (1 = first result)
+    result_position = Column(Integer,     nullable=True)
+
+    # PDF download details
+    pdf_url         = Column(Text,        nullable=True)    # URL that worked
+    pdf_path        = Column(Text,        nullable=True)    # local file path
+    file_size_kb    = Column(Integer,     nullable=True)
+
+    downloaded_at   = Column(DateTime,    default=func.now())
+
+
+# ── TABLE 3: activity_logs ────────────────────────────────────────────────────
+class ActivityLog(Base):
+    """
+    Complete step-by-step trace of everything that happened in a run.
+    log_type values:
+      search        — the EuropePMC query that was fired
+      paper_found   — each paper returned by search (has PDF URL or not)
+      url_attempt   — each URL tried for each paper (success or failure)
+    """
+    __tablename__ = "activity_logs"
+
+    id           = Column(Integer, primary_key=True, autoincrement=True)
+    run_id       = Column(String(32), ForeignKey("runs.run_id"), nullable=False, index=True)
+    chemical     = Column(String(256), nullable=True)
+    log_type     = Column(String(32),  nullable=False, index=True)  # search / paper_found / url_attempt
+    logged_at    = Column(DateTime,    default=func.now())
+
+    # ── search fields (log_type = "search") ──────────────────────────────────
+    query_sent       = Column(Text,    nullable=True)   # full query string sent
+    api_url          = Column(Text,    nullable=True)   # full EuropePMC URL
+    response_time_ms = Column(Integer, nullable=True)
+    papers_returned  = Column(Integer, nullable=True)   # total in response
+    papers_with_pmcid= Column(Integer, nullable=True)   # after PMCID filter
+
+    # ── paper_found fields (log_type = "paper_found") ─────────────────────────
+    pmcid           = Column(String(32), nullable=True, index=True)
+    pmid            = Column(String(32), nullable=True)
+    doi             = Column(String(128),nullable=True)
+    title           = Column(Text,       nullable=True)
+    journal         = Column(String(256),nullable=True)
+    year            = Column(String(8),  nullable=True)
+    result_position = Column(Integer,    nullable=True)  # rank in search results (1-based)
+    has_pdf_urls    = Column(Boolean,    nullable=True)  # did paper have any PDF URLs?
+    pdf_url_count   = Column(Integer,    nullable=True)  # how many PDF URLs found
+
+    # ── url_attempt fields (log_type = "url_attempt") ─────────────────────────
+    url          = Column(Text,        nullable=True)
+    attempt_no   = Column(Integer,     nullable=True)   # 1st try, 2nd try, …
+    http_status  = Column(Integer,     nullable=True)   # 200, 403, 404, …
+    content_type = Column(String(128), nullable=True)
+    is_pdf       = Column(Boolean,     nullable=True)
+    success      = Column(Boolean,     nullable=True)   # True = PDF saved
+    file_size_kb = Column(Integer,     nullable=True)
+    error        = Column(Text,        nullable=True)   # exception if any
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
