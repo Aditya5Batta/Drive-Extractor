@@ -83,7 +83,7 @@ async def run_pipeline(req: RunRequest, db: AsyncSession = Depends(get_db)):
     await db.flush()
 
     papers_out = []
-    pdfs_ok = pdfs_fail = pdfs_skip = pdfs_no_url = 0
+    pdfs_ok = pdfs_fail = pdfs_skip = 0
     papers_with_pdf = 0
     total_urls_tried = total_urls_success = 0
 
@@ -163,7 +163,7 @@ async def run_pipeline(req: RunRequest, db: AsyncSession = Depends(get_db)):
             with a unique, accurate wall-clock time regardless of asyncio quirks."""
             async with sem:
                 result = await _download_pdf(
-                    pmcid    = p["pmcid"] or "unknown",
+                    pmcid    = p["pmcid"],
                     pmid     = p.get("pmid") or "unknown",
                     pdf_urls = p["pdf_urls"],
                     pdf_dir  = PDF_DIR,
@@ -186,8 +186,6 @@ async def run_pipeline(req: RunRequest, db: AsyncSession = Depends(get_db)):
 
             if status == "success":
                 pdfs_ok += 1
-            elif status == "no_url":
-                pdfs_no_url += 1   # paper had no PDF URL at all (paywalled / no PMC record)
             else:
                 pdfs_fail += 1
 
@@ -252,8 +250,7 @@ async def run_pipeline(req: RunRequest, db: AsyncSession = Depends(get_db)):
         run.papers_with_pdf    = papers_with_pdf
         run.pdfs_success       = pdfs_ok
         run.pdfs_failed        = pdfs_fail
-        # pdfs_skipped stores both: papers beyond max_pdfs + papers with no PDF URLs
-        run.pdfs_skipped       = pdfs_skip + pdfs_no_url
+        run.pdfs_skipped       = pdfs_skip
         run.total_urls_tried   = total_urls_tried
         run.total_urls_success = total_urls_success
         run.status = (
