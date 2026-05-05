@@ -67,29 +67,35 @@ async def search(query: str, max_results: int = 25) -> dict:
 
         pmid = item.get("pmid")
 
-        # Collect EuropePMC PDF URLs from fullTextUrlList
-        pdf_urls = []
+        # Collect PDF URLs explicitly listed in the API response
+        api_pdf_urls = []
         for ft in item.get("fullTextUrlList", {}).get("fullTextUrl", []):
             if ft.get("documentStyle") == "pdf":
                 url = ft.get("url", "").strip()
                 if url:
-                    pdf_urls.append(url)
-        # EuropePMC native render endpoint
-        pdf_urls.append(f"https://europepmc.org/articles/{pmcid}?pdf=render")
+                    api_pdf_urls.append(url)
+
+        # has_pdf_from_api = True only when EuropePMC explicitly returned PDF links
+        has_pdf_from_api = bool(api_pdf_urls)
+
+        # Always append EuropePMC native render as final fallback
+        all_pdf_urls = api_pdf_urls + [f"https://europepmc.org/articles/{pmcid}?pdf=render"]
 
         papers.append({
-            "pmcid":    pmcid,
-            "pmid":     pmid,
-            "doi":      item.get("doi"),
-            "title":    item.get("title", "").strip(),
-            "abstract": item.get("abstractText", "").strip(),
-            "authors":  [a.get("fullName", "")
-                         for a in item.get("authorList", {}).get("author", [])],
-            "journal":  item.get("journalTitle", ""),
-            "year":     str(item.get("pubYear") or ""),
-            "epmc_url": (f"https://europepmc.org/article/MED/{pmid}"
-                         if pmid else f"https://europepmc.org/articles/{pmcid}"),
-            "pdf_urls": pdf_urls,
+            "pmcid":            pmcid,
+            "pmid":             pmid,
+            "doi":              item.get("doi"),
+            "title":            item.get("title", "").strip(),
+            "abstract":         item.get("abstractText", "").strip(),
+            "authors":          [a.get("fullName", "")
+                                 for a in item.get("authorList", {}).get("author", [])],
+            "journal":          item.get("journalTitle", ""),
+            "year":             str(item.get("pubYear") or ""),
+            "epmc_url":         (f"https://europepmc.org/article/MED/{pmid}"
+                                 if pmid else f"https://europepmc.org/articles/{pmcid}"),
+            "pdf_urls":         all_pdf_urls,       # what we'll actually try
+            "has_pdf_from_api": has_pdf_from_api,   # did API explicitly give PDF links?
+            "api_pdf_url_count": len(api_pdf_urls), # how many from API (excluding fallback)
         })
 
     return {

@@ -119,9 +119,11 @@ async def run_pipeline(req: RunRequest, db: AsyncSession = Depends(get_db)):
         _t0_mono = time.monotonic()            # monotonic reference for offset calc
         paper_found_time = datetime.utcnow()   # right after search returned
         for pos, paper in enumerate(papers, 1):
-            pdf_urls = paper.get("pdf_urls", [])
-            has_urls = bool(pdf_urls)
-            if has_urls:
+            pdf_urls        = paper.get("pdf_urls", [])
+            # has_pdf_urls = True only if EuropePMC API explicitly returned PDF links
+            # (not counting our fallback ?pdf=render URL)
+            has_pdf_from_api = paper.get("has_pdf_from_api", False)
+            if has_pdf_from_api:
                 papers_with_pdf += 1
             db.add(ActivityLog(
                 run_id          = run_id,
@@ -138,8 +140,11 @@ async def run_pipeline(req: RunRequest, db: AsyncSession = Depends(get_db)):
                 year            = paper.get("year"),
                 epmc_url        = paper.get("epmc_url"),
                 result_position = pos,
-                has_pdf_urls    = has_urls,
-                pdf_url_count   = len(pdf_urls),
+                # has_pdf_urls: did the API explicitly return PDF links for this paper?
+                has_pdf_urls    = has_pdf_from_api,
+                # pdf_url_count: API-provided links only (excludes fallback)
+                pdf_url_count   = paper.get("api_pdf_url_count", 0),
+                # pdf_urls_list: ALL URLs we will try (API links + fallback)
                 pdf_urls_list   = "\n".join(pdf_urls),
             ))
 
