@@ -20,7 +20,7 @@ HEADERS    = {
 }
 
 
-async def search(query: str, max_results: int = 25) -> dict:
+async def search(query: str, max_results: int = 50) -> dict:
     """
     Search EuropePMC for ALL papers — no open-access filter.
     Every paper returned by EuropePMC is included and logged in activity_logs

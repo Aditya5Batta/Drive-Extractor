@@ -67,7 +67,7 @@ if FRONTEND.exists():
 
 class RunRequest(BaseModel):
     chemical:    str
-    max_results: int = 25
+    max_results: int = 50
     max_pdfs:    int = 10
 
 
@@ -83,7 +83,7 @@ async def run_pipeline(req: RunRequest, db: AsyncSession = Depends(get_db)):
     await db.flush()
 
     papers_out = []
-    pdfs_ok = pdfs_fail = pdfs_skip = 0
+    pdfs_ok = pdfs_fail = pdfs_skip = pdfs_no_url = 0
     papers_with_pdf = 0
     total_urls_tried = total_urls_success = 0
 
@@ -152,15 +152,20 @@ async def run_pipeline(req: RunRequest, db: AsyncSession = Depends(get_db)):
                 pdf_urls_list   = "\n".join(pdf_urls),
             ))
 
-        # ── Step 3: Download PDFs ─────────────────────────────────────────────
-        to_dl   = papers[: req.max_pdfs]
-        to_skip = papers[req.max_pdfs :]
+        # ── Step 3: Pick which papers to download ────────────────────────────
+        # Paywalled papers (no pdf_urls) do NOT consume a download slot.
+        # We walk through all papers in order and fill slots only for those
+        # that actually have URLs, up to max_pdfs.
+        dl_budget = req.max_pdfs
+        to_download: list[tuple[int, dict]] = []  # (original 1-based pos, paper)
+        for orig_pos, paper in enumerate(papers, 1):
+            if paper.get("pdf_urls") and dl_budget > 0:
+                to_download.append((orig_pos, paper))
+                dl_budget -= 1
 
         sem = asyncio.Semaphore(2)
 
-        async def dl(p: dict) -> dict:
-            """Download one paper. Uses monotonic offsets to stamp every URL attempt
-            with a unique, accurate wall-clock time regardless of asyncio quirks."""
+        async def dl(orig_pos: int, p: dict) -> tuple:
             async with sem:
                 result = await _download_pdf(
                     pmcid    = p["pmcid"] or "unknown",
@@ -168,80 +173,86 @@ async def run_pipeline(req: RunRequest, db: AsyncSession = Depends(get_db)):
                     pdf_urls = p["pdf_urls"],
                     pdf_dir  = PDF_DIR,
                 )
-                # Convert each attempt's mono timestamp to a wall-clock datetime.
-                # monotonic offset from _t0_mono gives elapsed seconds since
-                # paper_found_time, so each attempt gets its own distinct timestamp.
                 mono_now = time.monotonic()
                 for i, att in enumerate(result.get("attempts", [])):
-                    elapsed = mono_now + i * 0.001   # tiny offset to keep them distinct
-                    att["attempted_at"] = paper_found_time + timedelta(seconds=elapsed - _t0_mono)
-                return result
+                    elapsed = mono_now + i * 0.001
+                    att["attempted_at"] = paper_found_time + timedelta(
+                        seconds=elapsed - _t0_mono)
+                return orig_pos, result
 
-        dl_results = list(await asyncio.gather(*[dl(p) for p in to_dl]))
+        dl_map: dict[int, dict] = dict(
+            await asyncio.gather(*[dl(pos, p) for pos, p in to_download])
+        )
 
-        # ── Step 4: Persist URL attempts + successful papers ──────────────────
-        for pos, (paper, result) in enumerate(zip(to_dl, dl_results), 1):
-            status   = result["status"]
-            attempts = result.get("attempts", [])
+        # ── Step 4: Persist results in original paper order ───────────────────
+        dl_positions = {pos for pos, _ in to_download}
 
-            if status == "success":
-                pdfs_ok += 1
+        for pos, paper in enumerate(papers, 1):
+            if not paper.get("pdf_urls"):
+                # No PDF URL at all — paywalled / no PMC record
+                result  = {"status": "no_url", "attempts": []}
+                pdfs_no_url += 1
+
+            elif pos in dl_map:
+                # We attempted a download for this paper
+                result   = dl_map[pos]
+                status   = result["status"]
+                attempts = result.get("attempts", [])
+
+                total_urls_tried   += len(attempts)
+                total_urls_success += sum(1 for a in attempts if a["success"])
+
+                if status == "success":
+                    pdfs_ok += 1
+                else:
+                    pdfs_fail += 1
+
+                # Log every URL attempt — sort_order slots directly after paper_found
+                for att in attempts:
+                    db.add(ActivityLog(
+                        run_id          = run_id,
+                        chemical        = chemical,
+                        log_type        = "url_attempt",
+                        logged_at       = att["attempted_at"],
+                        sort_order      = pos * 1000 + att["attempt_no"],
+                        pmcid           = paper["pmcid"],
+                        pmid            = paper.get("pmid"),
+                        title           = paper.get("title"),
+                        result_position = pos,
+                        url             = att["url"],
+                        attempt_no      = att["attempt_no"],
+                        http_status     = att["http_status"],
+                        content_type    = att["content_type"],
+                        is_pdf          = att["is_pdf"],
+                        success         = att["success"],
+                        file_size_kb    = att["file_size_kb"],
+                        error           = att["error"],
+                    ))
+
+                # Successful download → clean papers table
+                if status == "success":
+                    db.add(Paper(
+                        run_id          = run_id,
+                        chemical        = chemical,
+                        pmcid           = paper["pmcid"],
+                        pmid            = paper.get("pmid"),
+                        doi             = paper.get("doi"),
+                        title           = paper.get("title"),
+                        journal         = paper.get("journal"),
+                        year            = paper.get("year"),
+                        epmc_url        = paper.get("epmc_url"),
+                        result_position = pos,
+                        pdf_url         = result.get("pdf_source"),
+                        pdf_path        = result.get("pdf_path"),
+                        file_size_kb    = result.get("file_size_kb"),
+                    ))
+
             else:
-                pdfs_fail += 1
-
-            total_urls_tried   += len(attempts)
-            total_urls_success += sum(1 for a in attempts if a["success"])
-
-            # Log every URL attempt
-            # sort_order = pos*1000 + attempt_no  so they slot right after their paper:
-            #   paper #3  → sort_order 3000
-            #   url try 1 → sort_order 3001
-            #   url try 2 → sort_order 3002
-            for att in attempts:
-                db.add(ActivityLog(
-                    run_id          = run_id,
-                    chemical        = chemical,
-                    log_type        = "url_attempt",
-                    logged_at       = att["attempted_at"],
-                    sort_order      = pos * 1000 + att["attempt_no"],
-                    pmcid           = paper["pmcid"],
-                    pmid            = paper.get("pmid"),
-                    title           = paper.get("title"),
-                    result_position = pos,
-                    url             = att["url"],
-                    attempt_no      = att["attempt_no"],
-                    http_status     = att["http_status"],
-                    content_type    = att["content_type"],
-                    is_pdf          = att["is_pdf"],
-                    success         = att["success"],
-                    file_size_kb    = att["file_size_kb"],
-                    error           = att["error"],
-                ))
-
-            # Only successful downloads go into the clean papers table
-            if status == "success":
-                db.add(Paper(
-                    run_id          = run_id,
-                    chemical        = chemical,
-                    pmcid           = paper["pmcid"],
-                    pmid            = paper.get("pmid"),
-                    doi             = paper.get("doi"),
-                    title           = paper.get("title"),
-                    journal         = paper.get("journal"),
-                    year            = paper.get("year"),
-                    epmc_url        = paper.get("epmc_url"),
-                    result_position = pos,
-                    pdf_url         = result.get("pdf_source"),
-                    pdf_path        = result.get("pdf_path"),
-                    file_size_kb    = result.get("file_size_kb"),
-                ))
+                # Has PDF URLs but max_pdfs limit already reached
+                result = {"status": "skipped"}
+                pdfs_skip += 1
 
             papers_out.append(_paper_out(paper, result, pos))
-
-        # Skipped papers (beyond max_pdfs)
-        for paper in to_skip:
-            pdfs_skip += 1
-            papers_out.append(_paper_out(paper, {"status": "skipped"}, None))
 
         # ── Step 5: Finalise run ──────────────────────────────────────────────
         finished = datetime.utcnow()
@@ -250,7 +261,7 @@ async def run_pipeline(req: RunRequest, db: AsyncSession = Depends(get_db)):
         run.papers_with_pdf    = papers_with_pdf
         run.pdfs_success       = pdfs_ok
         run.pdfs_failed        = pdfs_fail
-        run.pdfs_skipped       = pdfs_skip
+        run.pdfs_skipped       = pdfs_skip + pdfs_no_url  # beyond limit + no free PDF
         run.total_urls_tried   = total_urls_tried
         run.total_urls_success = total_urls_success
         run.status = (
@@ -268,7 +279,7 @@ async def run_pipeline(req: RunRequest, db: AsyncSession = Depends(get_db)):
 
     await db.commit()
     return _build_response(run_id, chemical, run, papers_out,
-                           pdfs_ok, pdfs_fail, pdfs_skip)
+                           pdfs_ok, pdfs_fail, pdfs_skip, pdfs_no_url)
 
 
 # ── GET /api/runs ─────────────────────────────────────────────────────────────
@@ -357,22 +368,20 @@ async def health(db: AsyncSession = Depends(get_db)):
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
-def _build_response(run_id, chemical, run, papers_out, ok, fail, skip):
+def _build_response(run_id, chemical, run, papers_out, ok, fail, skip, no_url=0):
     return {
         "run_id":   run_id,
         "chemical": chemical,
         "status":   run.status,
         "summary": {
-            "papers_found":       run.papers_found or 0,
-            "papers_with_pdf":    run.papers_with_pdf or 0,
-            "pdfs_success":       ok,
-            "pdfs_failed":        fail,
-            "pdfs_skipped":       skip,
-            "total_urls_tried":   run.total_urls_tried or 0,
-            "total_urls_success": run.total_urls_success or 0,
-            "duration_s":         run.duration_s,
-            "started_at":         str(run.started_at),
-            "finished_at":        str(run.finished_at),
+            "papers_found":    run.papers_found or 0,
+            "pdfs_success":    ok,
+            "pdfs_failed":     fail,
+            "pdfs_no_url":     no_url,   # no free PDF (paywalled)
+            "pdfs_skipped":    skip,     # beyond max_pdfs limit
+            "duration_s":      run.duration_s,
+            "started_at":      str(run.started_at),
+            "finished_at":     str(run.finished_at),
         },
         "papers": papers_out,
     }
