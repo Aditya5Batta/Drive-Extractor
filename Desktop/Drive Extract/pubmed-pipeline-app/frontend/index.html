@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EuropePMC Pipeline</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #0f1117; color: #e2e8f0; min-height: 100vh; }
+    header { background: #1a1d27; border-bottom: 1px solid #2d3148; padding: 18px 32px; display: flex; align-items: center; gap: 12px; }
+    header h1 { font-size: 1.2rem; font-weight: 600; color: #a78bfa; }
+    header span { font-size: 0.8rem; color: #64748b; }
+    .container { max-width: 960px; margin: 0 auto; padding: 32px 24px; }
+
+    .search-card { background: #1a1d27; border: 1px solid #2d3148; border-radius: 12px; padding: 28px; margin-bottom: 32px; }
+    .search-card h2 { font-size: 1rem; color: #94a3b8; margin-bottom: 16px; }
+    .input-row { display: flex; gap: 12px; }
+    .input-row input { flex: 1; background: #0f1117; border: 1px solid #2d3148; border-radius: 8px; padding: 12px 16px; font-size: 1rem; color: #e2e8f0; outline: none; transition: border-color 0.2s; }
+    .input-row input:focus { border-color: #7c3aed; }
+    .input-row input::placeholder { color: #475569; }
+    .options-row { display: flex; gap: 24px; margin-top: 14px; }
+    .options-row label { font-size: 0.82rem; color: #64748b; display: flex; flex-direction: column; gap: 4px; }
+    .options-row input[type=number] { background: #0f1117; border: 1px solid #2d3148; border-radius: 6px; padding: 6px 10px; color: #e2e8f0; font-size: 0.9rem; width: 80px; }
+    button.run-btn { background: #7c3aed; color: #fff; border: none; border-radius: 8px; padding: 12px 28px; font-size: 1rem; font-weight: 600; cursor: pointer; transition: background 0.2s; white-space: nowrap; }
+    button.run-btn:hover:not(:disabled) { background: #6d28d9; }
+    button.run-btn:disabled { background: #3b3f5c; cursor: not-allowed; }
+
+    #status-bar { display: none; background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 12px 18px; margin-bottom: 24px; font-size: 0.9rem; color: #94a3b8; }
+
+    .summary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; margin-bottom: 28px; }
+    .chip { background: #1a1d27; border: 1px solid #2d3148; border-radius: 10px; padding: 14px 16px; }
+    .chip .label { font-size: 0.72rem; color: #64748b; text-transform: uppercase; letter-spacing: .05em; }
+    .chip .value { font-size: 1.4rem; font-weight: 700; margin-top: 4px; }
+    .chip.green .value { color: #4ade80; }
+    .chip.red   .value { color: #f87171; }
+    .chip.blue  .value { color: #60a5fa; }
+    .chip.gray  .value { color: #94a3b8; }
+
+    .section-title { font-size: 0.85rem; color: #64748b; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 12px; }
+    .paper-card { background: #1a1d27; border: 1px solid #2d3148; border-radius: 10px; padding: 16px 18px; margin-bottom: 10px; display: flex; gap: 16px; align-items: flex-start; }
+    .paper-card .badge { min-width: 72px; text-align: center; padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 600; margin-top: 2px; }
+    .badge.success { background: #14532d; color: #4ade80; }
+    .badge.failed  { background: #450a0a; color: #f87171; }
+    .badge.skipped { background: #1e293b; color: #94a3b8; }
+    .badge.no_url  { background: #1c1917; color: #a8a29e; }
+    .paper-info { flex: 1; }
+    .paper-info .title { font-size: 0.95rem; font-weight: 600; color: #e2e8f0; margin-bottom: 4px; line-height: 1.4; }
+    .paper-info .meta  { font-size: 0.78rem; color: #64748b; }
+    .paper-info .meta a { color: #818cf8; text-decoration: none; }
+    .paper-info .meta a:hover { text-decoration: underline; }
+
+    #history-section { margin-top: 40px; }
+    .run-row { background: #1a1d27; border: 1px solid #2d3148; border-radius: 8px; padding: 12px 18px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; transition: border-color 0.15s; }
+    .run-row:hover { border-color: #7c3aed; }
+    .run-row .chem { font-weight: 600; font-size: 0.95rem; }
+    .run-row .meta { font-size: 0.78rem; color: #64748b; margin-top: 2px; }
+    .run-row .badge { font-size: 0.75rem; padding: 3px 10px; border-radius: 5px; font-weight: 600; }
+
+    .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #4b5563; border-top-color: #7c3aed; border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; margin-right: 8px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+<header>
+  <h1>EuropePMC Pipeline</h1>
+  <span>Search and download open-access PDFs</span>
+</header>
+
+<div class="container">
+
+  <div class="search-card">
+    <h2>Enter a chemical name</h2>
+    <div class="input-row">
+      <input id="chemical-input" type="text" placeholder="e.g. Benzene, Toluene, Formaldehyde..." />
+      <button class="run-btn" id="run-btn" onclick="runPipeline()">Run</button>
+    </div>
+    <div class="options-row">
+      <label>Max papers
+        <input type="number" id="max-results" value="25" min="1" max="50" />
+      </label>
+      <label>Max PDFs to download
+        <input type="number" id="max-pdfs" value="10" min="1" max="25" />
+      </label>
+    </div>
+  </div>
+
+  <div id="status-bar"></div>
+  <div id="summary-grid" class="summary-grid" style="display:none"></div>
+
+  <div id="results-section" style="display:none">
+    <div class="section-title">Papers Found</div>
+    <div id="papers-list"></div>
+  </div>
+
+  <div id="history-section">
+    <div class="section-title">Recent Runs</div>
+    <div id="history-list"><span style="color:#475569;font-size:.85rem">Loading...</span></div>
+  </div>
+
+</div>
+
+<script>
+async function runPipeline() {
+  const chemical = document.getElementById("chemical-input").value.trim();
+  if (!chemical) { alert("Please enter a chemical name."); return; }
+  const maxResults = parseInt(document.getElementById("max-results").value) || 25;
+  const maxPdfs    = parseInt(document.getElementById("max-pdfs").value) || 10;
+
+  setStatus("running", `Searching EuropePMC for "${chemical}"...`);
+  document.getElementById("run-btn").disabled = true;
+  document.getElementById("summary-grid").style.display = "none";
+  document.getElementById("results-section").style.display = "none";
+  document.getElementById("papers-list").innerHTML = "";
+
+  try {
+    const res  = await fetch("/api/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chemical, max_results: maxResults, max_pdfs: maxPdfs }),
+    });
+    const data = await res.json();
+    renderSummary(data);
+    renderPapers(data.papers || []);
+    const s = data.summary || {};
+    setStatus(data.status,
+      `Run ${data.run_id} — ${s.papers_found} papers, ${s.pdfs_success} PDFs downloaded, ${s.pdfs_failed} failed — ${(s.duration_s||0).toFixed(1)}s`);
+    loadHistory();
+  } catch (err) {
+    setStatus("failed", "Error: " + err.message);
+  } finally {
+    document.getElementById("run-btn").disabled = false;
+  }
+}
+
+function setStatus(state, msg) {
+  const el   = document.getElementById("status-bar");
+  const icon = state === "running" ? `<span class="spinner"></span>`
+             : state === "success" ? "&#x2705; "
+             : state === "failed"  ? "&#x274C; " : "&#x26A0;&#xFE0F; ";
+  el.innerHTML = icon + msg;
+  el.style.display = "block";
+}
+
+function renderSummary(data) {
+  const s = data.summary || {};
+  const grid = document.getElementById("summary-grid");
+  grid.style.display = "grid";
+  grid.innerHTML = `
+    <div class="chip blue"><div class="label">Papers Found</div><div class="value">${s.papers_found??0}</div></div>
+    <div class="chip green"><div class="label">PDFs Downloaded</div><div class="value">${s.pdfs_success??0}</div></div>
+    <div class="chip red"><div class="label">PDFs Failed</div><div class="value">${s.pdfs_failed??0}</div></div>
+    <div class="chip gray"><div class="label">Skipped</div><div class="value">${s.pdfs_skipped??0}</div></div>
+    <div class="chip gray"><div class="label">Duration</div><div class="value">${(s.duration_s||0).toFixed(1)}s</div></div>
+  `;
+}
+
+function renderPapers(papers) {
+  const list = document.getElementById("papers-list");
+  const sec  = document.getElementById("results-section");
+  if (!papers.length) { sec.style.display = "none"; return; }
+  sec.style.display = "block";
+  list.innerHTML = papers.map(p => {
+    const status = p.pdf_status || "unknown";
+    const meta   = [p.journal, p.year].filter(Boolean).join(" · ");
+    const fname  = p.pdf_path ? p.pdf_path.split(/[\\/]/).pop() : null;
+    const links  = [
+      p.epmc_url ? `<a href="${p.epmc_url}" target="_blank">EuropePMC</a>` : "",
+      p.doi      ? `<a href="https://doi.org/${p.doi}" target="_blank">DOI</a>` : "",
+      fname      ? `<a href="/pdfs/${fname}" target="_blank">Download PDF</a>` : "",
+    ].filter(Boolean).join(" &nbsp;|&nbsp; ");
+    return `
+      <div class="paper-card">
+        <div class="badge ${status}">${status}</div>
+        <div class="paper-info">
+          <div class="title">${p.title || "(No title)"}</div>
+          <div class="meta">${meta}${meta && links ? " &nbsp;&middot;&nbsp; " : ""}${links}</div>
+          ${p.pmcid ? `<div class="meta" style="margin-top:4px;color:#475569">PMCID: ${p.pmcid}</div>` : ""}
+        </div>
+      </div>`;
+  }).join("");
+}
+
+async function loadHistory() {
+  try {
+    const runs = await (await fetch("/api/runs")).json();
+    const list = document.getElementById("history-list");
+    if (!runs.length) { list.innerHTML = `<span style="color:#475569;font-size:.85rem">No runs yet.</span>`; return; }
+    list.innerHTML = runs.map(r => {
+      const col = r.status === "success" ? "#4ade80" : r.status === "failed" ? "#f87171" : "#94a3b8";
+      const dur = r.duration_s ? r.duration_s.toFixed(1) + "s" : "—";
+      const dt  = r.started_at ? new Date(r.started_at).toLocaleString() : "";
+      return `<div class="run-row">
+        <div>
+          <div class="chem">${r.chemical}</div>
+          <div class="meta">${r.run_id} &nbsp;·&nbsp; ${dt} &nbsp;·&nbsp; ${dur} &nbsp;·&nbsp; ${r.papers_found??0} papers &nbsp;·&nbsp; ${r.pdfs_success??0} PDFs</div>
+        </div>
+        <span class="badge" style="background:#1e293b;color:${col}">${r.status}</span>
+      </div>`;
+    }).join("");
+  } catch(_) {}
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  loadHistory();
+  document.getElementById("chemical-input").addEventListener("keydown", e => {
+    if (e.key === "Enter") runPipeline();
+  });
+});
+</script>
+</body>
+</html>
