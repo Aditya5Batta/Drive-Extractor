@@ -92,9 +92,12 @@ class _DbDriver:
     extra_fields:  Callable[[dict], dict]  # paper → kwargs (for SS-only fields)
 
 
-def _no_extras(_paper: dict) -> dict: return {}
+def _epmc_extras(p: dict) -> dict:
+    """EuropePMC + PMC: just the EuropePMC article page link."""
+    return {"epmc_url": p.get("epmc_url")}
 
 def _ss_extras(p: dict) -> dict:
+    """Semantic Scholar: ss_url plus SS-only metadata."""
     return {
         "paper_id":  p.get("paper_id"),
         "arxiv":     p.get("arxiv"),
@@ -121,9 +124,9 @@ async def _ss_dl(p: dict, d: Path) -> dict:
 
 
 EPMC = _DbDriver("RUN_", PDF_DIR_EPMC, _epmc_search, _epmc_dl,
-                 Run, Paper, ActivityLog, _no_extras)
+                 Run, Paper, ActivityLog, _epmc_extras)
 PMC  = _DbDriver("PMC_", PDF_DIR_PMC,  _pmc_search,  _pmc_dl,
-                 PmcRun, PmcPaper, PmcActivityLog, _no_extras)
+                 PmcRun, PmcPaper, PmcActivityLog, _epmc_extras)
 SS   = _DbDriver("SS_",  PDF_DIR_SS,   _ss_search,   _ss_dl,
                  SsRun, SsPaper, SsActivityLog, _ss_extras)
 
@@ -210,7 +213,13 @@ async def _run_pipeline(d: _DbDriver, req: RunRequest, db: AsyncSession) -> dict
         await db.flush()
 
         if not papers:
-            run.status = "no_results"
+            # Distinguish a real "no_results" from an upstream API failure
+            # (e.g. SS rate-limited 429) so the user knows to retry.
+            if sr.get("status") == "error":
+                run.status = "failed"
+                run.error  = sr.get("error") or "search returned no data"
+            else:
+                run.status = "no_results"
             run.finished_at = datetime.utcnow()
             run.duration_s  = (run.finished_at - started).total_seconds()
             await db.commit()
@@ -228,7 +237,7 @@ async def _run_pipeline(d: _DbDriver, req: RunRequest, db: AsyncSession) -> dict
                 title=p.get("title"), abstract=p.get("abstract"),
                 authors=", ".join(p.get("authors", [])),
                 journal=p.get("journal"), year=p.get("year"),
-                epmc_url=p.get("epmc_url"), result_position=pos,
+                result_position=pos,
                 has_pdf_urls=p.get("has_pdf_from_api", False),
                 pdf_url_count=p.get("api_pdf_url_count", 0),
                 pdf_urls_list="\n".join(p.get("pdf_urls", [])),
@@ -267,7 +276,7 @@ async def _run_pipeline(d: _DbDriver, req: RunRequest, db: AsyncSession) -> dict
                         run_id=run_id, chemical=chemical,
                         pmcid=p.get("pmcid"), pmid=p.get("pmid"), doi=p.get("doi"),
                         title=p.get("title"), journal=p.get("journal"),
-                        year=p.get("year"), epmc_url=p.get("epmc_url"),
+                        year=p.get("year"),
                         result_position=pos,
                         pdf_url=result.get("pdf_source"),
                         pdf_path=result.get("pdf_path"),

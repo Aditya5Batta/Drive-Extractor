@@ -23,11 +23,16 @@ Flow:
 Rate limit: 100 req / 5 min without API key. Retries on 429 with backoff.
 """
 from __future__ import annotations
-import asyncio, time
+import asyncio, os, time
 from datetime import datetime
 from pathlib import Path
 
 import httpx
+
+# Optional SS API key — drop SS_API_KEY=... into .env to unlock the higher
+# rate limit (apply at semanticscholar.org/product/api#api-key-form).
+# When absent we fall through to the public free tier (≈100 req / 5 min).
+SS_API_KEY = os.getenv("SS_API_KEY", "").strip()
 
 SEARCH_URL = "https://api.semanticscholar.org/graph/v1/paper/search"
 FIELDS     = "title,authors,year,venue,externalIds,openAccessPdf,abstract,publicationDate,isOpenAccess,citationCount"
@@ -39,6 +44,7 @@ HEADERS    = {
         "Chrome/120.0.0.0 Safari/537.36"
     ),
     "Accept": "application/json,*/*",
+    **({"x-api-key": SS_API_KEY} if SS_API_KEY else {}),
 }
 PDF_HEADERS = {**HEADERS, "Accept": "application/pdf,*/*"}
 
@@ -46,12 +52,13 @@ PDF_HEADERS = {**HEADERS, "Accept": "application/pdf,*/*"}
 PAGE_SIZE = 100   # SS Graph API hard cap per request
 
 
-async def _fetch_page(query: str, offset: int) -> tuple[list[dict], str | None, str]:
+async def _fetch_page(query: str, offset: int, limit: int = PAGE_SIZE
+                      ) -> tuple[list[dict], str | None, str]:
     """One paginated SS API call.  Returns (data_items, error, api_url)."""
     params = {
         "query":         query,
         "fields":        FIELDS,
-        "limit":         PAGE_SIZE,
+        "limit":         min(max(1, limit), PAGE_SIZE),
         "offset":        offset,
         "openAccessPdf": "",   # "Has PDF" filter
     }
@@ -89,8 +96,10 @@ async def search(query: str, max_results: int = 100) -> dict:
     last_error = None
     first_api_url = ""
 
+    remaining = target_count
     for page_idx in range(pages_needed):
-        items, err, api_url = await _fetch_page(query, page_idx * PAGE_SIZE)
+        page_limit = min(remaining, PAGE_SIZE)
+        items, err, api_url = await _fetch_page(query, page_idx * PAGE_SIZE, page_limit)
         if not first_api_url:
             first_api_url = api_url
         if err and not items:
@@ -99,8 +108,9 @@ async def search(query: str, max_results: int = 100) -> dict:
         if not items:
             break          # end of results
         data.extend(items)
-        if len(items) < PAGE_SIZE:
-            break          # no more pages available
+        remaining -= len(items)
+        if len(items) < page_limit or remaining <= 0:
+            break          # no more pages, or quota satisfied
 
     response_time_ms = int((time.monotonic() - t0) * 1000)
 

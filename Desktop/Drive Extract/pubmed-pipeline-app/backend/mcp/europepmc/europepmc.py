@@ -83,15 +83,19 @@ async def search(query: str, max_results: int = 50) -> dict:
         # has_pdf_from_api = True only when EuropePMC API explicitly provided PDF links
         has_pdf_from_api = bool(api_pdf_urls)
 
-        # Build the list of URLs we will actually try:
-        #   - start with any API-provided PDF links
-        #   - add the EuropePMC render fallback ONLY if we have a PMCID
-        #     and it isn't already in the list (prevents duplicates)
+        # Build the list of URLs we will actually try, in reliability order:
+        #   1. API-provided PDF links (fullTextUrlList from EuropePMC)
+        #   2. EuropePMC render endpoint   (works for any PMC-indexed paper)
+        #   3. NCBI's new pmc.ncbi.nlm.nih.gov domain — useful when the
+        #      EuropePMC render times out (saw this on placenta-RGDV paper).
         all_pdf_urls = list(api_pdf_urls)
         if pmcid:
-            render_url = f"https://europepmc.org/articles/{pmcid}?pdf=render"
-            if render_url not in all_pdf_urls:
-                all_pdf_urls.append(render_url)
+            for fallback in (
+                f"https://europepmc.org/articles/{pmcid}?pdf=render",
+                f"https://pmc.ncbi.nlm.nih.gov/articles/{pmcid}/pdf/",
+            ):
+                if fallback not in all_pdf_urls:
+                    all_pdf_urls.append(fallback)
             papers_with_pmcid += 1
 
         # EuropePMC article page link
