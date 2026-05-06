@@ -43,28 +43,21 @@ HEADERS    = {
 PDF_HEADERS = {**HEADERS, "Accept": "application/pdf,*/*"}
 
 
-async def search(query: str, max_results: int = 100, offset: int = 0) -> dict:
-    """
-    Search Semantic Scholar for papers — equivalent to website "Has PDF" filter.
+PAGE_SIZE = 100   # SS Graph API hard cap per request
 
-    Args:
-      offset: pagination offset (0 = first page, 100 = page 2, …)
-    """
+
+async def _fetch_page(query: str, offset: int) -> tuple[list[dict], str | None, str]:
+    """One paginated SS API call.  Returns (data_items, error, api_url)."""
     params = {
         "query":         query,
         "fields":        FIELDS,
-        "limit":         min(max_results, 100),
+        "limit":         PAGE_SIZE,
         "offset":        offset,
-        "openAccessPdf": "",   # ← "Has PDF" filter (matches website's pdf=true)
+        "openAccessPdf": "",   # "Has PDF" filter
     }
-
-    req     = httpx.Request("GET", SEARCH_URL, params=params)
-    api_url = str(req.url)
-
-    t0 = time.monotonic()
+    api_url = str(httpx.Request("GET", SEARCH_URL, params=params).url)
 
     last_error = None
-    r          = None
     for attempt, wait in enumerate([1, 3, 6, 12]):
         await asyncio.sleep(wait)
         try:
@@ -72,30 +65,54 @@ async def search(query: str, max_results: int = 100, offset: int = 0) -> dict:
                 r = await c.get(SEARCH_URL, params=params)
             if r.status_code == 429:
                 last_error = f"Rate limited (429) — attempt {attempt + 1}"
-                if attempt < 3:
-                    continue
-                break
+                if attempt < 3: continue
+                return [], last_error, api_url
             r.raise_for_status()
-            break
+            return r.json().get("data", []), None, api_url
         except Exception as e:
             last_error = str(e)
-            if "429" in str(e) and attempt < 3:
-                continue
-            break
+            if "429" in str(e) and attempt < 3: continue
+            return [], last_error, api_url
+    return [], last_error, api_url
 
-    if r is None or r.status_code != 200:
-        return {
-            "query_sent": query, "api_url": api_url,
-            "papers_returned": 0, "papers_with_pmcid": 0,
-            "response_time_ms": int((time.monotonic() - t0) * 1000),
-            "status": "error", "error": last_error or "No response", "papers": [],
-        }
+
+async def search(query: str, max_results: int = 100) -> dict:
+    """
+    Search Semantic Scholar for papers — equivalent to website "Has PDF" filter.
+    Auto-paginates internally when max_results > PAGE_SIZE (cap = 500).
+    """
+    target_count = min(max_results, 500)
+    pages_needed = (target_count + PAGE_SIZE - 1) // PAGE_SIZE
+
+    t0 = time.monotonic()
+    data: list[dict] = []
+    last_error = None
+    first_api_url = ""
+
+    for page_idx in range(pages_needed):
+        items, err, api_url = await _fetch_page(query, page_idx * PAGE_SIZE)
+        if not first_api_url:
+            first_api_url = api_url
+        if err and not items:
+            last_error = err
+            break
+        if not items:
+            break          # end of results
+        data.extend(items)
+        if len(items) < PAGE_SIZE:
+            break          # no more pages available
 
     response_time_ms = int((time.monotonic() - t0) * 1000)
-    data = r.json().get("data", [])
-    papers_returned = len(data)
-    papers_with_pdf = 0
 
+    if not data and last_error:
+        return {
+            "query_sent": query, "api_url": first_api_url,
+            "papers_returned": 0, "papers_with_pmcid": 0,
+            "response_time_ms": response_time_ms,
+            "status": "error", "error": last_error, "papers": [],
+        }
+
+    papers_with_pdf = 0
     papers = []
     for item in data:
         paper_id = item.get("paperId") or ""
@@ -164,8 +181,8 @@ async def search(query: str, max_results: int = 100, offset: int = 0) -> dict:
 
     return {
         "query_sent":        query,
-        "api_url":           api_url,
-        "papers_returned":   papers_returned,
+        "api_url":           first_api_url,
+        "papers_returned":   len(papers),
         "papers_with_pmcid": papers_with_pdf,
         "response_time_ms":  response_time_ms,
         "status":            "ok",
