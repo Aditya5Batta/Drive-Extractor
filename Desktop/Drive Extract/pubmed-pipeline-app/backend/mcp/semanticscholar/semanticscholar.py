@@ -2,16 +2,25 @@
 Semantic Scholar API client — Graph API v1.
 https://api.semanticscholar.org/graph/v1/paper/search
 
-Flow:
-  1. Search with openAccessPdf field AND isOpenAccess filter
-     → equivalent to "Has PDF" filter on the SS website
-  2. Build PDF URL list per paper:
-       a. openAccessPdf.url  (SS direct OA link)
-       b. arxiv.org/pdf/{id} (ArXiv papers — always free)
-       c. europepmc.org render URL (PMC-indexed papers)
-  3. Download PDFs in order, stop at first success per paper.
+IMPORTANT NOTE on ranking:
+  The PUBLIC Graph API (this module) and the SS WEBSITE use different ranking
+  algorithms. For the same query the website may show paper A first while the
+  Graph API shows paper B first. This is by SS's design — the website uses an
+  internal ranker (`www.semanticscholar.org/api/1/search`) that is NOT exposed
+  publicly: it returns 202/empty for unauthenticated callers and the search
+  page is client-rendered (no data in HTML).
+  We use `sort=relevance` here, which is the closest the public API allows.
 
-Rate limit: 1 req/sec without API key. Retries on 429 with backoff.
+Flow:
+  1. Search with `openAccessPdf=` filter — equivalent to website's "Has PDF".
+  2. Build PDF URL list per paper (most reliable sources first):
+       a. EuropePMC render  (any PMC-indexed paper — never blocks)
+       b. ArXiv direct PDF  (any preprint — never blocks)
+       c. SS openAccessPdf  (publisher OA link — works for some, fails for NEJM/JAMA)
+       d. NCBI PMC native   (last resort)
+  3. Caller (pipeline) downloads in order, stops at first success.
+
+Rate limit: 100 req / 5 min without API key. Retries on 429 with backoff.
 """
 from __future__ import annotations
 import asyncio, time
@@ -21,8 +30,7 @@ from pathlib import Path
 import httpx
 
 SEARCH_URL = "https://api.semanticscholar.org/graph/v1/paper/search"
-# Request openAccessPdf so SS returns the direct PDF URL when available
-FIELDS     = "title,authors,year,venue,externalIds,openAccessPdf,abstract,publicationDate,isOpenAccess"
+FIELDS     = "title,authors,year,venue,externalIds,openAccessPdf,abstract,publicationDate,isOpenAccess,citationCount"
 TIMEOUT    = 30.0
 HEADERS    = {
     "User-Agent": (
@@ -35,21 +43,19 @@ HEADERS    = {
 PDF_HEADERS = {**HEADERS, "Accept": "application/pdf,*/*"}
 
 
-async def search(query: str, max_results: int = 100) -> dict:
+async def search(query: str, max_results: int = 100, offset: int = 0) -> dict:
     """
     Search Semantic Scholar for papers — equivalent to website "Has PDF" filter.
-    Only papers where we can build at least one PDF URL are kept.
 
-    Returns:
-      {
-        query_sent, api_url, papers_returned, papers_with_pmcid,
-        response_time_ms, status, error, papers: [...]
-      }
+    Args:
+      offset: pagination offset (0 = first page, 100 = page 2, …)
     """
     params = {
-        "query":  query,
-        "fields": FIELDS,
-        "limit":  min(max_results, 100),   # SS API hard cap = 100
+        "query":         query,
+        "fields":        FIELDS,
+        "limit":         min(max_results, 100),
+        "offset":        offset,
+        "openAccessPdf": "",   # ← "Has PDF" filter (matches website's pdf=true)
     }
 
     req     = httpx.Request("GET", SEARCH_URL, params=params)
@@ -57,7 +63,6 @@ async def search(query: str, max_results: int = 100) -> dict:
 
     t0 = time.monotonic()
 
-    # Retry up to 3× on 429 with increasing backoff
     last_error = None
     r          = None
     for attempt, wait in enumerate([1, 3, 6, 12]):
@@ -71,7 +76,7 @@ async def search(query: str, max_results: int = 100) -> dict:
                     continue
                 break
             r.raise_for_status()
-            break   # success
+            break
         except Exception as e:
             last_error = str(e)
             if "429" in str(e) and attempt < 3:
@@ -114,26 +119,23 @@ async def search(query: str, max_results: int = 100) -> dict:
         ss_pdf    = (open_pdf.get("url") or None) if open_pdf else None
         oa_status = (open_pdf.get("status") or "") if open_pdf else ""
 
-        # Build PDF URL list — priority order:
-        #   1. SS openAccessPdf (direct OA)
-        #   2. ArXiv PDF        (free for all ArXiv papers)
-        #   3. EuropePMC render (free for PMC-indexed papers)
-        #   4. NCBI PMC native  (free for open-access PMC articles)
+        # Build PDF URL list — most reliable sources first
         pdf_urls: list[str] = []
 
-        if ss_pdf:
-            pdf_urls.append(ss_pdf)
+        if pmcid:
+            epmc = f"https://europepmc.org/articles/{pmcid}?pdf=render"
+            pdf_urls.append(epmc)
 
         if arxiv:
             arxiv_pdf = f"https://arxiv.org/pdf/{str(arxiv).strip()}.pdf"
             if arxiv_pdf not in pdf_urls:
                 pdf_urls.append(arxiv_pdf)
 
+        if ss_pdf and ss_pdf not in pdf_urls:
+            pdf_urls.append(ss_pdf)
+
         if pmcid:
-            epmc = f"https://europepmc.org/articles/{pmcid}?pdf=render"
             ncbi = f"https://pmc.ncbi.nlm.nih.gov/articles/{pmcid}/pdf/"
-            if epmc not in pdf_urls:
-                pdf_urls.append(epmc)
             if ncbi not in pdf_urls:
                 pdf_urls.append(ncbi)
 
@@ -176,7 +178,7 @@ async def download_pdf(paper_id: str, pmid: str, pdf_urls: list[str],
                        pdf_dir: Path) -> dict:
     """
     Download a Semantic Scholar paper's PDF.
-    Tries each URL in order — SS OA link, ArXiv, EuropePMC render, NCBI.
+    Tries each URL in order — EuropePMC render, ArXiv, SS OA link, NCBI.
     Returns full per-URL attempt trace.
     """
     pdf_dir.mkdir(parents=True, exist_ok=True)

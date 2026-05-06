@@ -1,0 +1,29 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Backend (FastAPI)",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["backend/main.py"],
+      "port": 9000
+    },
+    {
+      "name": "EuropePMC MCP (HTTP)",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["backend/mcp/server.py", "--http"],
+      "port": 8001
+    },
+    {
+      "name": "PMC MCP (HTTP)",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["backend/mcp/pmc/server.py", "--http"],
+      "port": 8002
+    },
+    {
+      "name": "Semantic Scholar MCP (HTTP)",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["backend/mcp/semanticscholar/server.py", "--http"],
+      "port": 8003
+    }
+  ]
+}

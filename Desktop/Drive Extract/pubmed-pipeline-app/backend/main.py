@@ -93,6 +93,68 @@ class RunRequest(BaseModel):
     # (not exposed in UI; postgres still logs everything)
 
 
+# ── shared helpers ────────────────────────────────────────────────────────────
+def _build_candidates(papers: list[dict]) -> list[tuple[int, dict]]:
+    """
+    Walk papers in their original (relevance) order, keep only those with
+    pdf_urls, and deduplicate by DOI / normalised title.
+    Returns list of (orig_position, paper) tuples preserving relevance order.
+    """
+    candidates: list[tuple[int, dict]] = []
+    seen_dois:    set[str] = set()
+    seen_titles:  set[str] = set()
+    seen_pmids:   set[str] = set()
+
+    for orig_pos, paper in enumerate(papers, 1):
+        if not paper.get("pdf_urls"):
+            continue
+
+        doi   = (paper.get("doi")   or "").lower().strip()
+        pmid  = (paper.get("pmid")  or "").strip()
+        title = (paper.get("title") or "").lower().strip()
+        # Loose title key: collapse whitespace and remove most punctuation
+        title_key = " ".join(title.split())
+
+        if doi   and doi   in seen_dois:    continue
+        if pmid  and pmid  in seen_pmids:   continue
+        if title_key and title_key in seen_titles:  continue
+
+        candidates.append((orig_pos, paper))
+        if doi:       seen_dois.add(doi)
+        if pmid:      seen_pmids.add(pmid)
+        if title_key: seen_titles.add(title_key)
+
+    return candidates
+
+
+async def _download_until_target(
+    candidates: list[tuple[int, dict]],
+    dl_func,
+    target: int,
+    batch_size: int = 5,
+) -> dict[int, dict]:
+    """
+    Download candidates in batches in their given order.  Stop as soon as we
+    have `target` successes — any later candidate is left untouched (gives
+    the user back a clean "max_pdfs" without wasting bandwidth).
+    Returns {pos: result} for every paper actually attempted.
+    """
+    dl_map: dict[int, dict] = {}
+    successes = 0
+    i = 0
+    while successes < target and i < len(candidates):
+        batch = candidates[i : i + batch_size]
+        i += len(batch)
+        batch_results = await asyncio.gather(*[dl_func(pos, p) for pos, p in batch])
+        for (pos, _), result in zip(batch, batch_results):
+            dl_map[pos] = result
+            if result.get("status") == "success":
+                successes += 1
+                if successes >= target:
+                    break
+    return dl_map
+
+
 # ── POST /api/run ─────────────────────────────────────────────────────────────
 @app.post("/api/run")
 async def run_pipeline(req: RunRequest, db: AsyncSession = Depends(get_db)):
@@ -178,19 +240,15 @@ async def run_pipeline(req: RunRequest, db: AsyncSession = Depends(get_db)):
             ))
 
         # ── Step 3: Pick which papers to download ────────────────────────────
-        # Paywalled papers (no pdf_urls) do NOT consume a download slot.
-        # We walk through all papers in order and fill slots only for those
-        # that actually have URLs, up to max_pdfs.
-        dl_budget = req.max_pdfs
-        to_download: list[tuple[int, dict]] = []  # (original 1-based pos, paper)
-        for orig_pos, paper in enumerate(papers, 1):
-            if paper.get("pdf_urls") and dl_budget > 0:
-                to_download.append((orig_pos, paper))
-                dl_budget -= 1
+        # Walk through papers in EuropePMC relevance order, dedupe by DOI/PMID/
+        # title, and download in batches until we have max_pdfs successes.
+        # Some papers fail (404, 403, broken render) → batched retry keeps
+        # going so the user actually gets max_pdfs PDFs when possible.
+        candidates = _build_candidates(papers)
 
         sem = asyncio.Semaphore(2)
 
-        async def dl(orig_pos: int, p: dict) -> tuple:
+        async def dl(orig_pos: int, p: dict) -> dict:
             async with sem:
                 result = await _download_pdf(
                     pmcid    = p["pmcid"] or "unknown",
@@ -203,14 +261,11 @@ async def run_pipeline(req: RunRequest, db: AsyncSession = Depends(get_db)):
                     elapsed = mono_now + i * 0.001
                     att["attempted_at"] = paper_found_time + timedelta(
                         seconds=elapsed - _t0_mono)
-                return orig_pos, result
+                return result
 
-        dl_map: dict[int, dict] = dict(
-            await asyncio.gather(*[dl(pos, p) for pos, p in to_download])
-        )
+        dl_map = await _download_until_target(candidates, dl, req.max_pdfs)
 
         # ── Step 4: Persist results in original paper order ───────────────────
-        dl_positions = {pos for pos, _ in to_download}
 
         for pos, paper in enumerate(papers, 1):
             if not paper.get("pdf_urls"):
@@ -382,17 +437,13 @@ async def pmc_run_pipeline(req: RunRequest, db: AsyncSession = Depends(get_db)):
                 pdf_urls_list   = "\n".join(pdf_urls),
             ))
 
-        # Pick papers to download (skip no-URL papers, fill slots up to max_pdfs)
-        dl_budget  = req.max_pdfs
-        to_download: list[tuple[int, dict]] = []
-        for orig_pos, paper in enumerate(papers, 1):
-            if paper.get("pdf_urls") and dl_budget > 0:
-                to_download.append((orig_pos, paper))
-                dl_budget -= 1
+        # Walk papers in PMC relevance order, dedupe, batched-retry until
+        # max_pdfs successes (some PMC PDFs fail to render → keep going).
+        candidates = _build_candidates(papers)
 
         sem = asyncio.Semaphore(2)
 
-        async def dl_pmc(orig_pos: int, p: dict) -> tuple:
+        async def dl_pmc(orig_pos: int, p: dict) -> dict:
             async with sem:
                 result = await _pmc_download_pdf(
                     pmcid    = p["pmcid"] or "unknown",
@@ -405,11 +456,9 @@ async def pmc_run_pipeline(req: RunRequest, db: AsyncSession = Depends(get_db)):
                     elapsed = mono_now + i * 0.001
                     att["attempted_at"] = paper_found_time + timedelta(
                         seconds=elapsed - _t0_mono)
-                return orig_pos, result
+                return result
 
-        dl_map: dict[int, dict] = dict(
-            await asyncio.gather(*[dl_pmc(pos, p) for pos, p in to_download])
-        )
+        dl_map = await _download_until_target(candidates, dl_pmc, req.max_pdfs)
 
         for pos, paper in enumerate(papers, 1):
             if not paper.get("pdf_urls"):
@@ -524,24 +573,57 @@ async def ss_run_pipeline(req: RunRequest, db: AsyncSession = Depends(get_db)):
     total_urls_tried = total_urls_success = 0
 
     try:
-        # SS API returns up to 100 per request; search wider than needed
-        auto_max = min(req.max_pdfs * 10, 100)
-        search_result = await _ss_search(chemical, max_results=auto_max)
+        # ── Step 1: Paginate SS to find enough downloadable papers ────────────
+        # For popular chemicals (Aspirin, Ibuprofen, etc.) the top SS results
+        # are high-citation NEJM/JAMA/Elsevier papers with no PMC or ArXiv IDs.
+        # Their openAccessPdf URLs return HTTP 403 or HTML — nothing downloads.
+        #
+        # Strategy:
+        #   • "Reliable"   = paper has pmcid OR arxiv  →  EuropePMC/ArXiv never block
+        #   • "Unreliable" = only has publisher OA URL  →  often 403 or HTML
+        #
+        # We paginate (up to MAX_SS_PAGES × 100 papers) until we have at least
+        # req.max_pdfs reliable papers, then stop.  Unreliable papers are used
+        # as fallback only if reliable pool is still short after all pages.
+        # All seen papers are logged to the DB in relevance order.
+        MAX_SS_PAGES = 5   # scan up to 500 papers total
+        all_papers: list[dict] = []
 
-        db.add(SsActivityLog(
-            run_id            = run_id,
-            chemical          = chemical,
-            log_type          = "search",
-            logged_at         = datetime.utcnow(),
-            sort_order        = 0,
-            query_sent        = search_result["query_sent"],
-            api_url           = search_result["api_url"],
-            papers_returned   = search_result["papers_returned"],
-            papers_with_pmcid = search_result["papers_with_pmcid"],
-            response_time_ms  = search_result["response_time_ms"],
-        ))
+        for page in range(MAX_SS_PAGES):
+            offset       = page * 100
+            batch_result = await _ss_search(chemical, max_results=100, offset=offset)
 
-        papers = search_result["papers"]
+            db.add(SsActivityLog(
+                run_id            = run_id,
+                chemical          = chemical,
+                log_type          = "search",
+                logged_at         = datetime.utcnow(),
+                sort_order        = page,   # 0, 1, 2, … — before any paper_found (1000+)
+                query_sent        = batch_result["query_sent"],
+                api_url           = batch_result["api_url"],
+                papers_returned   = batch_result["papers_returned"],
+                papers_with_pmcid = batch_result["papers_with_pmcid"],
+                response_time_ms  = batch_result["response_time_ms"],
+            ))
+            await db.flush()
+
+            batch = batch_result.get("papers", [])
+            if not batch:
+                break
+
+            all_papers.extend(batch)
+
+            # Stop early if we already have enough reliable papers
+            reliable_count = sum(
+                1 for p in all_papers if p.get("pmcid") or p.get("arxiv")
+            )
+            if reliable_count >= req.max_pdfs:
+                break
+            # Also stop if SS returned fewer results than requested (end of index)
+            if len(batch) < 100:
+                break
+
+        papers = all_papers
         run.papers_found = len(papers)
         await db.flush()
 
@@ -552,6 +634,7 @@ async def ss_run_pipeline(req: RunRequest, db: AsyncSession = Depends(get_db)):
             await db.commit()
             return _build_response(run_id, chemical, run, [], 0, 0, 0)
 
+        # ── Step 2: Log every paper found (in relevance order) ───────────────
         _t0_mono = time.monotonic()
         paper_found_time = datetime.utcnow()
         for pos, paper in enumerate(papers, 1):
@@ -583,17 +666,16 @@ async def ss_run_pipeline(req: RunRequest, db: AsyncSession = Depends(get_db)):
                 pdf_urls_list   = "\n".join(pdf_urls),
             ))
 
-        # Pick papers to download — only those with PDF URLs, up to max_pdfs
-        dl_budget   = req.max_pdfs
-        to_download: list[tuple[int, dict]] = []
-        for orig_pos, paper in enumerate(papers, 1):
-            if paper.get("pdf_urls") and dl_budget > 0:
-                to_download.append((orig_pos, paper))
-                dl_budget -= 1
+        # ── Step 3: Pick papers to download ──────────────────────────────────
+        # Walk papers in SS relevance order (matches website's "Has PDF" list),
+        # dedupe by DOI/PMID/title (SS often returns preprint + final version),
+        # batched-retry until max_pdfs successes — paywalled NEJM/JAMA papers
+        # at the top will fail and we silently move on to the next one.
+        candidates = _build_candidates(papers)
 
         sem = asyncio.Semaphore(2)
 
-        async def dl_ss(orig_pos: int, p: dict) -> tuple:
+        async def dl_ss(orig_pos: int, p: dict) -> dict:
             async with sem:
                 result = await _ss_download_pdf(
                     paper_id = p.get("paper_id") or "unknown",
@@ -606,12 +688,11 @@ async def ss_run_pipeline(req: RunRequest, db: AsyncSession = Depends(get_db)):
                     elapsed = mono_now + i * 0.001
                     att["attempted_at"] = paper_found_time + timedelta(
                         seconds=elapsed - _t0_mono)
-                return orig_pos, result
+                return result
 
-        dl_map: dict[int, dict] = dict(
-            await asyncio.gather(*[dl_ss(pos, p) for pos, p in to_download])
-        )
+        dl_map = await _download_until_target(candidates, dl_ss, req.max_pdfs)
 
+        # ── Step 4: Persist results in relevance order ────────────────────────
         for pos, paper in enumerate(papers, 1):
             if not paper.get("pdf_urls"):
                 result      = {"status": "no_url", "attempts": []}
@@ -672,6 +753,7 @@ async def ss_run_pipeline(req: RunRequest, db: AsyncSession = Depends(get_db)):
 
             papers_out.append(_paper_out(paper, result, pos))
 
+        # ── Step 5: Finalise run ──────────────────────────────────────────────
         finished = datetime.utcnow()
         run.finished_at        = finished
         run.duration_s         = (finished - started).total_seconds()
