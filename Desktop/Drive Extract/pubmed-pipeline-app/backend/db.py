@@ -367,6 +367,108 @@ class SsActivityLog(Base):
     error        = Column(Text,        nullable=True)
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# Document databases (ECHA / NTP / WHO IPCS)
+# Same 3-table shape — pmcid/pmid/doi columns stay null because these sources
+# index regulatory documents, not journal articles.  `epmc_url` holds the
+# document's source URL; `journal` is reused as the doc-type label.
+# ══════════════════════════════════════════════════════════════════════════════
+def _make_run_class(name: str, table: str):
+    return type(name, (Base,), {
+        "__tablename__":      table,
+        "id":                 Column(Integer, primary_key=True, autoincrement=True),
+        "run_id":             Column(String(32),  unique=True, nullable=False, index=True),
+        "chemical":           Column(String(256), nullable=False),
+        "started_at":         Column(DateTime,    default=datetime.utcnow),
+        "finished_at":        Column(DateTime,    nullable=True),
+        "duration_s":         Column(Float,       nullable=True),
+        "papers_found":       Column(Integer, default=0),
+        "papers_with_pdf":    Column(Integer, default=0),
+        "pdfs_success":       Column(Integer, default=0),
+        "pdfs_failed":        Column(Integer, default=0),
+        "pdfs_skipped":       Column(Integer, default=0),
+        "total_urls_tried":   Column(Integer, default=0),
+        "total_urls_success": Column(Integer, default=0),
+        "status":             Column(String(32), default="started"),
+        "error":              Column(Text, nullable=True),
+    })
+
+def _make_paper_class(name: str, table: str, runs_table: str):
+    return type(name, (Base,), {
+        "__tablename__":   table,
+        "id":              Column(Integer, primary_key=True, autoincrement=True),
+        "run_id":          Column(String(32), ForeignKey(f"{runs_table}.run_id"),
+                                  nullable=False, index=True),
+        "chemical":        Column(String(256), nullable=False),
+        "pmcid":           Column(String(32),  nullable=True),
+        "pmid":            Column(String(32),  nullable=True),
+        "doi":             Column(String(128), nullable=True),
+        "title":           Column(Text,        nullable=True),
+        "journal":         Column(String(256), nullable=True),
+        "year":            Column(String(8),   nullable=True),
+        "epmc_url":        Column(Text,        nullable=True),
+        "result_position": Column(Integer,     nullable=True),
+        "pdf_url":         Column(Text,        nullable=True),
+        "pdf_path":        Column(Text,        nullable=True),
+        "file_size_kb":    Column(Integer,     nullable=True),
+        "downloaded_at":   Column(DateTime,    default=datetime.utcnow),
+    })
+
+def _make_log_class(name: str, table: str, runs_table: str):
+    return type(name, (Base,), {
+        "__tablename__":   table,
+        "id":              Column(Integer, primary_key=True, autoincrement=True),
+        "run_id":          Column(String(32), ForeignKey(f"{runs_table}.run_id"),
+                                  nullable=False, index=True),
+        "chemical":        Column(String(256), nullable=True),
+        "log_type":        Column(String(32), nullable=False, index=True),
+        "logged_at":       Column(DateTime, default=datetime.utcnow),
+        "sort_order":      Column(Integer, nullable=True, index=True),
+        # search
+        "query_sent":        Column(Text,    nullable=True),
+        "api_url":           Column(Text,    nullable=True),
+        "response_time_ms":  Column(Integer, nullable=True),
+        "papers_returned":   Column(Integer, nullable=True),
+        "papers_with_pmcid": Column(Integer, nullable=True),
+        # paper_found
+        "pmcid":           Column(String(32),  nullable=True),
+        "pmid":            Column(String(32),  nullable=True),
+        "doi":             Column(String(128), nullable=True),
+        "title":           Column(Text,        nullable=True),
+        "abstract":        Column(Text,        nullable=True),
+        "authors":         Column(Text,        nullable=True),
+        "journal":         Column(String(256), nullable=True),
+        "year":            Column(String(8),   nullable=True),
+        "epmc_url":        Column(Text,        nullable=True),
+        "result_position": Column(Integer,     nullable=True),
+        "has_pdf_urls":    Column(Boolean,     nullable=True),
+        "pdf_url_count":   Column(Integer,     nullable=True),
+        "pdf_urls_list":   Column(Text,        nullable=True),
+        # url_attempt
+        "url":          Column(Text,        nullable=True),
+        "attempt_no":   Column(Integer,     nullable=True),
+        "http_status":  Column(Integer,     nullable=True),
+        "content_type": Column(String(128), nullable=True),
+        "is_pdf":       Column(Boolean,     nullable=True),
+        "success":      Column(Boolean,     nullable=True),
+        "file_size_kb": Column(Integer,     nullable=True),
+        "error":        Column(Text,        nullable=True),
+    })
+
+
+EchaRun         = _make_run_class  ("EchaRun",         "echa_runs")
+EchaPaper       = _make_paper_class("EchaPaper",       "echa_papers",       "echa_runs")
+EchaActivityLog = _make_log_class  ("EchaActivityLog", "echa_activity_logs", "echa_runs")
+
+NtpRun          = _make_run_class  ("NtpRun",          "ntp_runs")
+NtpPaper        = _make_paper_class("NtpPaper",        "ntp_papers",        "ntp_runs")
+NtpActivityLog  = _make_log_class  ("NtpActivityLog",  "ntp_activity_logs", "ntp_runs")
+
+WhoRun          = _make_run_class  ("WhoRun",          "who_runs")
+WhoPaper        = _make_paper_class("WhoPaper",        "who_papers",        "who_runs")
+WhoActivityLog  = _make_log_class  ("WhoActivityLog",  "who_activity_logs", "who_runs")
+
+
 # ── helpers ───────────────────────────────────────────────────────────────────
 async def get_db():
     async with AsyncSessionLocal() as session:

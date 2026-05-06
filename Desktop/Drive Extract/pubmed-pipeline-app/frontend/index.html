@@ -12,7 +12,7 @@
     header h1 { font-size: 1.15rem; font-weight: 600; color: #a78bfa; }
     header span { font-size: 0.78rem; color: #475569; }
 
-    .container { max-width: 1200px; margin: 0 auto; padding: 28px 24px; }
+    .container { max-width: 1400px; margin: 0 auto; padding: 28px 24px; }
 
     /* ── Search bar ── */
     .search-card { background: #1a1d27; border: 1px solid #2d3148; border-radius: 12px; padding: 24px 28px; margin-bottom: 24px; }
@@ -24,7 +24,7 @@
     .run-btn:hover:not(:disabled) { background: #6d28d9; }
     .run-btn:disabled { background: #3b3f5c; cursor: not-allowed; }
 
-    /* ── Three-panel grid ── */
+    /* ── Six-panel grid (3×2) ── */
     .panels { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
     @media (max-width: 1100px) { .panels { grid-template-columns: 1fr 1fr; } }
     @media (max-width: 680px)  { .panels { grid-template-columns: 1fr; } }
@@ -32,17 +32,18 @@
     .panel { background: #1a1d27; border: 1px solid #2d3148; border-radius: 12px; overflow: hidden; }
     .panel-header { padding: 14px 20px; border-bottom: 1px solid #2d3148; display: flex; align-items: center; justify-content: space-between; }
     .panel-header .db-name { font-size: 0.9rem; font-weight: 700; }
-    .panel-header .db-name.epmc { color: #60a5fa; }
-    .panel-header .db-name.pmc  { color: #34d399; }
-    .panel-header .db-name.ss   { color: #fb923c; }
+    .panel-header .db-name.epmc { color: #60a5fa; }   /* blue   */
+    .panel-header .db-name.pmc  { color: #34d399; }   /* green  */
+    .panel-header .db-name.ss   { color: #fb923c; }   /* orange */
+    .panel-header .db-name.echa { color: #22d3ee; }   /* cyan   */
+    .panel-header .db-name.ntp  { color: #fbbf24; }   /* gold   */
+    .panel-header .db-name.who  { color: #f472b6; }   /* pink   */
     .panel-header label { font-size: 0.78rem; color: #64748b; display: flex; align-items: center; gap: 8px; }
     .panel-header input[type=number] { background: #0f1117; border: 1px solid #2d3148; border-radius: 6px; padding: 5px 8px; color: #e2e8f0; font-size: 0.85rem; width: 58px; outline: none; }
     .panel-body { padding: 16px 20px; min-height: 120px; }
 
-    /* ── Status ── */
     .status-bar { font-size: 0.82rem; color: #94a3b8; padding: 8px 12px; background: #0f1117; border-radius: 6px; margin-bottom: 14px; display: none; }
 
-    /* ── Summary chips ── */
     .chips { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
     .chip { border-radius: 8px; padding: 10px 14px; min-width: 90px; background: #0f1117; border: 1px solid #1e293b; }
     .chip .lbl { font-size: 0.65rem; color: #475569; text-transform: uppercase; letter-spacing: .06em; }
@@ -51,24 +52,23 @@
     .chip.red   .val { color: #f87171; }
     .chip.gray  .val { color: #94a3b8; }
 
-    /* ── Paper cards ── */
     .section-lbl { font-size: 0.7rem; color: #475569; text-transform: uppercase; letter-spacing: .1em; margin-bottom: 10px; }
     .paper-card { border: 1px solid #1e293b; border-radius: 8px; padding: 12px 14px; margin-bottom: 7px; display: flex; gap: 12px; align-items: flex-start; background: #0f1117; }
     .paper-card:hover { border-color: #334155; }
     .num { min-width: 26px; height: 26px; border-radius: 6px; background: #052e16; border: 1px solid #166534; color: #4ade80; font-size: 0.72rem; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
-    .paper-info .title { font-size: 0.88rem; font-weight: 600; color: #e2e8f0; margin-bottom: 4px; line-height: 1.4; }
+    .paper-info .title { font-size: 0.88rem; font-weight: 600; color: #e2e8f0; margin-bottom: 4px; line-height: 1.4; word-break: break-word; }
     .paper-info .meta  { font-size: 0.74rem; color: #475569; line-height: 1.6; }
     .paper-info .meta a { color: #818cf8; text-decoration: none; }
     .paper-info .meta a:hover { text-decoration: underline; }
     .paper-info .ids   { font-size: 0.7rem; color: #334155; margin-top: 2px; font-family: monospace; }
     .empty-msg { color: #374151; font-size: 0.82rem; text-align: center; padding: 24px 0; }
 
-    /* ── History ── */
     .history-section { margin-top: 28px; }
     .section-title { font-size: 0.72rem; color: #475569; text-transform: uppercase; letter-spacing: .1em; margin-bottom: 10px; }
     .history-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
     @media (max-width: 1100px) { .history-grid { grid-template-columns: 1fr 1fr; } }
     @media (max-width: 680px)  { .history-grid { grid-template-columns: 1fr; } }
+    .history-grid h4 { font-size:0.72rem; margin-bottom:8px; font-weight:600; }
     .run-row { background: #1a1d27; border: 1px solid #2d3148; border-radius: 7px; padding: 10px 14px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; }
     .run-row:hover { border-color: #7c3aed; }
     .run-row .chem { font-weight: 600; font-size: 0.88rem; }
@@ -83,7 +83,7 @@
 
 <header>
   <h1>PDF Pipeline</h1>
-  <span>EuropePMC · PubMed Central · Semantic Scholar — parallel search</span>
+  <span>EuropePMC · PubMed Central · Semantic Scholar · ECHA · NTP · WHO IPCS — parallel search</span>
 </header>
 
 <div class="container">
@@ -91,112 +91,89 @@
   <!-- Search bar -->
   <div class="search-card">
     <div class="search-row">
-      <input type="text" id="chemical-input" placeholder="Enter chemical name  e.g. Benzene, Toluene, Formaldehyde…" />
+      <input type="text" id="chemical-input" placeholder="Enter chemical name  e.g. Benzene, Toluene, Aspirin, Formaldehyde…" />
       <button class="run-btn" id="run-btn" onclick="runAll()">Run All</button>
     </div>
   </div>
 
-  <!-- Two panels -->
-  <div class="panels">
+  <!-- Six panels — populated by JS -->
+  <div class="panels" id="panels"></div>
 
-    <!-- EuropePMC panel -->
-    <div class="panel">
-      <div class="panel-header">
-        <span class="db-name epmc">EuropePMC</span>
-        <label>PDFs to download
-          <input type="number" id="epmc-max-pdfs" value="10" min="1" max="25" />
-        </label>
-      </div>
-      <div class="panel-body">
-        <div class="status-bar" id="epmc-status"></div>
-        <div class="chips" id="epmc-chips" style="display:none"></div>
-        <div id="epmc-results"></div>
-      </div>
-    </div>
-
-    <!-- PMC panel -->
-    <div class="panel">
-      <div class="panel-header">
-        <span class="db-name pmc">PubMed Central</span>
-        <label>PDFs to download
-          <input type="number" id="pmc-max-pdfs" value="10" min="1" max="25" />
-        </label>
-      </div>
-      <div class="panel-body">
-        <div class="status-bar" id="pmc-status"></div>
-        <div class="chips" id="pmc-chips" style="display:none"></div>
-        <div id="pmc-results"></div>
-      </div>
-    </div>
-
-    <!-- Semantic Scholar panel -->
-    <div class="panel">
-      <div class="panel-header">
-        <span class="db-name ss">Semantic Scholar</span>
-        <label>PDFs to download
-          <input type="number" id="ss-max-pdfs" value="10" min="1" max="25" />
-        </label>
-      </div>
-      <div class="panel-body">
-        <div class="status-bar" id="ss-status"></div>
-        <div class="chips" id="ss-chips" style="display:none"></div>
-        <div id="ss-results"></div>
-      </div>
-    </div>
-
-  </div>
-
-  <!-- History -->
+  <!-- History — six columns -->
   <div class="history-section">
     <div class="section-title">Recent Runs</div>
-    <div class="history-grid">
-      <div>
-        <div style="font-size:0.72rem;color:#60a5fa;margin-bottom:8px;font-weight:600">EUROPEPMC</div>
-        <div id="epmc-history"><span class="empty-msg">Loading…</span></div>
-      </div>
-      <div>
-        <div style="font-size:0.72rem;color:#34d399;margin-bottom:8px;font-weight:600">PUBMED CENTRAL</div>
-        <div id="pmc-history"><span class="empty-msg">Loading…</span></div>
-      </div>
-      <div>
-        <div style="font-size:0.72rem;color:#fb923c;margin-bottom:8px;font-weight:600">SEMANTIC SCHOLAR</div>
-        <div id="ss-history"><span class="empty-msg">Loading…</span></div>
-      </div>
-    </div>
+    <div class="history-grid" id="history-grid"></div>
   </div>
 
 </div>
 
 <script>
-// ── Run all three pipelines simultaneously ────────────────────────────────────
+// ── Database registry ────────────────────────────────────────────────────────
+// One config row per DB.  Adding a new DB later = add one entry here.
+const DBS = [
+  { id: "epmc", label: "EuropePMC",        runUrl: "/api/run",      listUrl: "/api/runs",      pdfDir: "/pdfs/europepmc",       color: "#60a5fa" },
+  { id: "pmc",  label: "PubMed Central",   runUrl: "/api/pmc/run",  listUrl: "/api/pmc/runs",  pdfDir: "/pdfs/pmc",             color: "#34d399" },
+  { id: "ss",   label: "Semantic Scholar", runUrl: "/api/ss/run",   listUrl: "/api/ss/runs",   pdfDir: "/pdfs/semanticscholar", color: "#fb923c" },
+  { id: "echa", label: "ECHA",             runUrl: "/api/echa/run", listUrl: "/api/echa/runs", pdfDir: "/pdfs/echa",            color: "#22d3ee" },
+  { id: "ntp",  label: "NTP",              runUrl: "/api/ntp/run",  listUrl: "/api/ntp/runs",  pdfDir: "/pdfs/ntp",             color: "#fbbf24" },
+  { id: "who",  label: "WHO IPCS",         runUrl: "/api/who/run",  listUrl: "/api/who/runs",  pdfDir: "/pdfs/who_ipcs",        color: "#f472b6" },
+];
+const dbById = Object.fromEntries(DBS.map(d => [d.id, d]));
+
+// ── Build panels & history columns dynamically ────────────────────────────────
+document.addEventListener("DOMContentLoaded", () => {
+  const panels = document.getElementById("panels");
+  panels.innerHTML = DBS.map(d => `
+    <div class="panel">
+      <div class="panel-header">
+        <span class="db-name ${d.id}">${d.label}</span>
+        <label>PDFs to download
+          <input type="number" id="${d.id}-max-pdfs" value="10" min="1" max="25" />
+        </label>
+      </div>
+      <div class="panel-body">
+        <div class="status-bar" id="${d.id}-status"></div>
+        <div class="chips" id="${d.id}-chips" style="display:none"></div>
+        <div id="${d.id}-results"></div>
+      </div>
+    </div>`).join("");
+
+  const hist = document.getElementById("history-grid");
+  hist.innerHTML = DBS.map(d => `
+    <div>
+      <h4 style="color:${d.color}">${d.label.toUpperCase()}</h4>
+      <div id="${d.id}-history"><span class="empty-msg">Loading…</span></div>
+    </div>`).join("");
+
+  loadHistory();
+  document.getElementById("chemical-input").addEventListener("keydown", e => {
+    if (e.key === "Enter") runAll();
+  });
+});
+
+// ── Fire all DBs in parallel ──────────────────────────────────────────────────
+let _pending = 0;
 function runAll() {
   const chemical = document.getElementById("chemical-input").value.trim();
   if (!chemical) { alert("Please enter a chemical name."); return; }
 
   document.getElementById("run-btn").disabled = true;
+  _pending = 0;
 
-  const epmcPdfs = parseInt(document.getElementById("epmc-max-pdfs").value) || 10;
-  const pmcPdfs  = parseInt(document.getElementById("pmc-max-pdfs").value)  || 10;
-  const ssPdfs   = parseInt(document.getElementById("ss-max-pdfs").value)   || 10;
-
-  // Reset all three panels
-  resetPanel("epmc");
-  resetPanel("pmc");
-  resetPanel("ss");
-
-  // Fire all three independently — each updates as soon as its response arrives
-  runPanel("epmc", "/api/run",     { chemical, max_pdfs: epmcPdfs }).finally(() => checkAllDone());
-  runPanel("pmc",  "/api/pmc/run", { chemical, max_pdfs: pmcPdfs  }).finally(() => checkAllDone());
-  runPanel("ss",   "/api/ss/run",  { chemical, max_pdfs: ssPdfs   }).finally(() => checkAllDone());
+  for (const d of DBS) {
+    const max_pdfs = parseInt(document.getElementById(`${d.id}-max-pdfs`).value) || 10;
+    resetPanel(d.id);
+    runPanel(d, { chemical, max_pdfs }).finally(checkAllDone);
+  }
 }
 
-let _pending = 0;
 function resetPanel(id) {
-  setStatus(id, "running", `Searching…`);
+  setStatus(id, "running", "Searching…");
   document.getElementById(`${id}-chips`).style.display = "none";
-  document.getElementById(`${id}-results`).innerHTML   = "";
+  document.getElementById(`${id}-results`).innerHTML  = "";
   _pending++;
 }
+
 function checkAllDone() {
   _pending--;
   if (_pending <= 0) {
@@ -205,24 +182,24 @@ function checkAllDone() {
   }
 }
 
-async function runPanel(id, url, body) {
+async function runPanel(d, body) {
   try {
-    const res  = await fetch(url, {
-      method:  "POST",
+    const res  = await fetch(d.runUrl, {
+      method: "POST",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify(body),
+      body: JSON.stringify(body),
     });
     const data = await res.json();
     const s    = data.summary || {};
 
-    renderChips(id, s);
-    renderPapers(id, data.papers || []);
-    setStatus(id, data.status,
+    renderChips(d.id, s);
+    renderPapers(d, data.papers || []);
+    setStatus(d.id, data.status,
       `Run ${data.run_id} · ${s.pdfs_success ?? 0} saved · ${s.pdfs_failed ?? 0} failed · ${(s.duration_s || 0).toFixed(1)}s`);
 
     loadHistory();
   } catch (err) {
-    setStatus(id, "failed", "Error: " + err.message);
+    setStatus(d.id, "failed", "Error: " + err.message);
   }
 }
 
@@ -231,30 +208,26 @@ function setStatus(id, state, msg) {
   const icon = state === "running" ? `<span class="spinner"></span>`
              : state === "success" ? "✅ "
              : state === "failed"  ? "❌ " : "⚠️ ";
-  el.innerHTML      = icon + msg;
-  el.style.display  = "block";
+  el.innerHTML     = icon + msg;
+  el.style.display = "block";
 }
 
 function renderChips(id, s) {
   const el = document.getElementById(`${id}-chips`);
   el.style.display = "flex";
   el.innerHTML = `
-    <div class="chip green"><div class="lbl">PDFs Saved</div>    <div class="val">${s.pdfs_success ?? 0}</div></div>
-    <div class="chip red">  <div class="lbl">Failed</div>        <div class="val">${s.pdfs_failed  ?? 0}</div></div>
-    <div class="chip gray"> <div class="lbl">Duration</div>      <div class="val">${(s.duration_s || 0).toFixed(1)}s</div></div>
+    <div class="chip green"><div class="lbl">PDFs Saved</div><div class="val">${s.pdfs_success ?? 0}</div></div>
+    <div class="chip red">  <div class="lbl">Failed</div>    <div class="val">${s.pdfs_failed  ?? 0}</div></div>
+    <div class="chip gray"> <div class="lbl">Duration</div>  <div class="val">${(s.duration_s || 0).toFixed(1)}s</div></div>
   `;
 }
 
-function renderPapers(id, papers) {
-  const el = document.getElementById(`${id}-results`);
+function renderPapers(d, papers) {
+  const el = document.getElementById(`${d.id}-results`);
   if (!papers.length) {
     el.innerHTML = `<div class="empty-msg">No PDFs found</div>`;
     return;
   }
-  // Map panel id → PDF subfolder
-  const pdfBase = id === "epmc" ? "/pdfs/europepmc"
-                : id === "pmc"  ? "/pdfs/pmc"
-                :                 "/pdfs/semanticscholar";
   el.innerHTML = `<div class="section-lbl">Downloaded PDFs</div>` +
     papers.map((p, i) => {
       const meta  = [p.journal, p.year].filter(Boolean).join(" · ");
@@ -263,13 +236,16 @@ function renderPapers(id, papers) {
       const links = [
         p.epmc_url ? `<a href="${p.epmc_url}" target="_blank">View</a>` : "",
         p.doi      ? `<a href="https://doi.org/${p.doi}" target="_blank">DOI</a>` : "",
-        fname      ? `<a href="${pdfBase}/${fname}" target="_blank">⬇ PDF${size}</a>` : "",
+        fname      ? `<a href="${d.pdfDir}/${encodeURIComponent(fname)}" target="_blank">⬇ PDF${size}</a>` : "",
       ].filter(Boolean).join("  ·  ");
-      const ids = p.pmcid ? `${p.pmcid}${p.pmid ? "  ·  PMID " + p.pmid : ""}` : "";
+      const ids = [
+        p.pmcid ? p.pmcid : "",
+        p.pmid  ? "PMID " + p.pmid : "",
+      ].filter(Boolean).join("  ·  ");
       return `<div class="paper-card">
         <div class="num">${i + 1}</div>
         <div class="paper-info">
-          <div class="title">${p.title || "(No title)"}</div>
+          <div class="title">${escapeHtml(p.title || "(No title)")}</div>
           ${meta || links ? `<div class="meta">${[meta, links].filter(Boolean).join("  ·  ")}</div>` : ""}
           ${ids ? `<div class="ids">${ids}</div>` : ""}
         </div>
@@ -277,22 +253,27 @@ function renderPapers(id, papers) {
     }).join("");
 }
 
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, c =>
+    ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c]));
+}
+
+// ── History — fetch every DB's runs in parallel ──────────────────────────────
 async function loadHistory() {
   try {
-    const [epmcRuns, pmcRuns, ssRuns] = await Promise.all([
-      fetch("/api/runs").then(r => r.json()),
-      fetch("/api/pmc/runs").then(r => r.json()),
-      fetch("/api/ss/runs").then(r => r.json()),
-    ]);
-    renderHistory("epmc-history", epmcRuns);
-    renderHistory("pmc-history",  pmcRuns);
-    renderHistory("ss-history",   ssRuns);
+    const allRuns = await Promise.all(DBS.map(d =>
+      fetch(d.listUrl).then(r => r.ok ? r.json() : []).catch(() => [])
+    ));
+    DBS.forEach((d, i) => renderHistory(`${d.id}-history`, allRuns[i]));
   } catch (_) {}
 }
 
 function renderHistory(elId, runs) {
   const el = document.getElementById(elId);
-  if (!runs.length) { el.innerHTML = `<span class="empty-msg">No runs yet.</span>`; return; }
+  if (!runs || !runs.length) {
+    el.innerHTML = `<span class="empty-msg">No runs yet.</span>`;
+    return;
+  }
   el.innerHTML = runs.slice(0, 8).map(r => {
     const col = r.status === "success" ? "#4ade80" : r.status === "failed" ? "#f87171" : "#94a3b8";
     const bg  = r.status === "success" ? "#052e16" : r.status === "failed" ? "#2d0a0a" : "#1e293b";
@@ -300,20 +281,13 @@ function renderHistory(elId, runs) {
     const dt  = r.started_at ? new Date(r.started_at).toLocaleString() : "";
     return `<div class="run-row">
       <div>
-        <div class="chem">${r.chemical}</div>
+        <div class="chem">${escapeHtml(r.chemical)}</div>
         <div class="meta">${r.run_id} · ${dt} · ${dur} · ${r.pdfs_success ?? 0} PDFs saved</div>
       </div>
       <span class="run-badge" style="background:${bg};color:${col}">${r.status}</span>
     </div>`;
   }).join("");
 }
-
-document.addEventListener("DOMContentLoaded", () => {
-  loadHistory();
-  document.getElementById("chemical-input").addEventListener("keydown", e => {
-    if (e.key === "Enter") runAll();
-  });
-});
 </script>
 </body>
 </html>

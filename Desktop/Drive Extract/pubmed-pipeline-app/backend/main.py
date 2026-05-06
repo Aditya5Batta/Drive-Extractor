@@ -30,14 +30,20 @@ from sqlalchemy import desc, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db import (
-    ActivityLog,    Paper,    Run,
-    PmcActivityLog, PmcPaper, PmcRun,
-    SsActivityLog,  SsPaper,  SsRun,
+    ActivityLog,     Paper,     Run,
+    PmcActivityLog,  PmcPaper,  PmcRun,
+    SsActivityLog,   SsPaper,   SsRun,
+    EchaActivityLog, EchaPaper, EchaRun,
+    NtpActivityLog,  NtpPaper,  NtpRun,
+    WhoActivityLog,  WhoPaper,  WhoRun,
     get_db, init_db,
 )
-from europepmc      import search as _epmc_search,  download_pdf as _epmc_download
-from pmc            import search as _pmc_search,   download_pdf as _pmc_download
+from europepmc       import search as _epmc_search, download_pdf as _epmc_download
+from pmc             import search as _pmc_search,  download_pdf as _pmc_download
 from semanticscholar import search as _ss_search,   download_pdf as _ss_download
+from echa            import search as _echa_search, download_pdf as _echa_download
+from ntp             import search as _ntp_search,  download_pdf as _ntp_download
+from who_ipcs        import search as _who_search,  download_pdf as _who_download
 
 # ── paths ─────────────────────────────────────────────────────────────────────
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -45,9 +51,13 @@ PDF_DIR      = PROJECT_ROOT / "pdfs"
 PDF_DIR_EPMC = PDF_DIR / "europepmc"
 PDF_DIR_PMC  = PDF_DIR / "pmc"
 PDF_DIR_SS   = PDF_DIR / "semanticscholar"
+PDF_DIR_ECHA = PDF_DIR / "echa"
+PDF_DIR_NTP  = PDF_DIR / "ntp"
+PDF_DIR_WHO  = PDF_DIR / "who_ipcs"
 FRONTEND     = PROJECT_ROOT / "frontend"
 
-for d in (PDF_DIR_EPMC, PDF_DIR_PMC, PDF_DIR_SS):
+for d in (PDF_DIR_EPMC, PDF_DIR_PMC, PDF_DIR_SS,
+          PDF_DIR_ECHA, PDF_DIR_NTP, PDF_DIR_WHO):
     d.mkdir(parents=True, exist_ok=True)
 
 
@@ -64,6 +74,9 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"],
 app.mount("/pdfs/europepmc",       StaticFiles(directory=str(PDF_DIR_EPMC)), name="pdfs_epmc")
 app.mount("/pdfs/pmc",             StaticFiles(directory=str(PDF_DIR_PMC)),  name="pdfs_pmc")
 app.mount("/pdfs/semanticscholar", StaticFiles(directory=str(PDF_DIR_SS)),   name="pdfs_ss")
+app.mount("/pdfs/echa",            StaticFiles(directory=str(PDF_DIR_ECHA)), name="pdfs_echa")
+app.mount("/pdfs/ntp",             StaticFiles(directory=str(PDF_DIR_NTP)),  name="pdfs_ntp")
+app.mount("/pdfs/who_ipcs",        StaticFiles(directory=str(PDF_DIR_WHO)),  name="pdfs_who")
 if FRONTEND.exists():
     app.mount("/static", StaticFiles(directory=str(FRONTEND)), name="static")
 
@@ -122,13 +135,30 @@ async def _ss_dl(p: dict, d: Path) -> dict:
         paper_id=p.get("paper_id") or "unknown", pmid=p.get("pmid") or "unknown",
         pdf_urls=p["pdf_urls"], pdf_dir=d)
 
+# Document-database downloaders share the (pmcid, pmid, pdf_urls, pdf_dir)
+# signature. We pass safe placeholders for pmcid/pmid (the docs don't have them).
+async def _echa_dl(p: dict, d: Path) -> dict:
+    return await _echa_download("doc", "noid", p["pdf_urls"], d)
 
-EPMC = _DbDriver("RUN_", PDF_DIR_EPMC, _epmc_search, _epmc_dl,
+async def _ntp_dl(p: dict, d: Path) -> dict:
+    return await _ntp_download("doc", "noid", p["pdf_urls"], d)
+
+async def _who_dl(p: dict, d: Path) -> dict:
+    return await _who_download("doc", "noid", p["pdf_urls"], d)
+
+
+EPMC = _DbDriver("RUN_",  PDF_DIR_EPMC, _epmc_search, _epmc_dl,
                  Run, Paper, ActivityLog, _epmc_extras)
-PMC  = _DbDriver("PMC_", PDF_DIR_PMC,  _pmc_search,  _pmc_dl,
+PMC  = _DbDriver("PMC_",  PDF_DIR_PMC,  _pmc_search,  _pmc_dl,
                  PmcRun, PmcPaper, PmcActivityLog, _epmc_extras)
-SS   = _DbDriver("SS_",  PDF_DIR_SS,   _ss_search,   _ss_dl,
+SS   = _DbDriver("SS_",   PDF_DIR_SS,   _ss_search,   _ss_dl,
                  SsRun, SsPaper, SsActivityLog, _ss_extras)
+ECHA = _DbDriver("ECHA_", PDF_DIR_ECHA, _echa_search, _echa_dl,
+                 EchaRun, EchaPaper, EchaActivityLog, _epmc_extras)
+NTP  = _DbDriver("NTP_",  PDF_DIR_NTP,  _ntp_search,  _ntp_dl,
+                 NtpRun, NtpPaper, NtpActivityLog, _epmc_extras)
+WHO  = _DbDriver("WHO_",  PDF_DIR_WHO,  _who_search,  _who_dl,
+                 WhoRun, WhoPaper, WhoActivityLog, _epmc_extras)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -342,6 +372,18 @@ async def run_pmc(req: RunRequest, db: AsyncSession = Depends(get_db)):
 async def run_ss(req: RunRequest, db: AsyncSession = Depends(get_db)):
     return await _run_pipeline(SS, req, db)
 
+@app.post("/api/echa/run")
+async def run_echa(req: RunRequest, db: AsyncSession = Depends(get_db)):
+    return await _run_pipeline(ECHA, req, db)
+
+@app.post("/api/ntp/run")
+async def run_ntp(req: RunRequest, db: AsyncSession = Depends(get_db)):
+    return await _run_pipeline(NTP, req, db)
+
+@app.post("/api/who/run")
+async def run_who(req: RunRequest, db: AsyncSession = Depends(get_db)):
+    return await _run_pipeline(WHO, req, db)
+
 
 # ── runs listings (one shared dict shape) ─────────────────────────────────────
 @app.get("/api/runs")
@@ -355,6 +397,18 @@ async def list_runs_pmc(db: AsyncSession = Depends(get_db)):
 @app.get("/api/ss/runs")
 async def list_runs_ss(db: AsyncSession = Depends(get_db)):
     return await _list_runs(db, SsRun)
+
+@app.get("/api/echa/runs")
+async def list_runs_echa(db: AsyncSession = Depends(get_db)):
+    return await _list_runs(db, EchaRun)
+
+@app.get("/api/ntp/runs")
+async def list_runs_ntp(db: AsyncSession = Depends(get_db)):
+    return await _list_runs(db, NtpRun)
+
+@app.get("/api/who/runs")
+async def list_runs_who(db: AsyncSession = Depends(get_db)):
+    return await _list_runs(db, WhoRun)
 
 
 async def _list_runs(db: AsyncSession, model) -> list[dict]:

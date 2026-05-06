@@ -10,7 +10,7 @@
     {
       "name": "EuropePMC MCP (HTTP)",
       "runtimeExecutable": "python",
-      "runtimeArgs": ["backend/mcp/server.py", "--http"],
+      "runtimeArgs": ["backend/mcp/europepmc/server.py", "--http"],
       "port": 8001
     },
     {
@@ -24,6 +24,24 @@
       "runtimeExecutable": "python",
       "runtimeArgs": ["backend/mcp/semanticscholar/server.py", "--http"],
       "port": 8003
+    },
+    {
+      "name": "ECHA MCP (HTTP)",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["backend/mcp/echa/server.py", "--http"],
+      "port": 8004
+    },
+    {
+      "name": "NTP MCP (HTTP)",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["backend/mcp/ntp/server.py", "--http"],
+      "port": 8005
+    },
+    {
+      "name": "WHO IPCS MCP (HTTP)",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["backend/mcp/who_ipcs/server.py", "--http"],
+      "port": 8006
     }
   ]
 }
