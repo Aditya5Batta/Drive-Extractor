@@ -60,6 +60,7 @@
     .panel-header .db-name.efsa     { color: #06b6d4; }
     .panel-header .db-name.nite     { color: #ef4444; }
     .panel-header .db-name.oecd     { color: #84cc16; }
+    .panel-header .db-name.pubmed   { color: #2563eb; }
     .panel-header label { font-size: 0.78rem; color: #64748b; display: flex; align-items: center; gap: 8px; }
     .panel-header input[type=number] { background: #0f1117; border: 1px solid #2d3148; border-radius: 6px; padding: 5px 8px; color: #e2e8f0; font-size: 0.85rem; width: 58px; outline: none; }
     .panel-body { padding: 16px 20px; min-height: 120px; }
@@ -117,7 +118,7 @@
 <script>
 const DBS = [
   { id: "epmc",   label: "EuropePMC",        runUrl: "/api/run",        pdfDir: "/pdfs/europepmc",       color: "#60a5fa" },
-  { id: "pmc",    label: "PubMed Central",   runUrl: "/api/pmc/run",    pdfDir: "/pdfs/pmc",             color: "#34d399" },
+  { id: "pmc",    label: "PMC Database",     runUrl: "/api/pmc/run",    pdfDir: "/pdfs/pmc",             color: "#34d399" },
   { id: "ss",     label: "Semantic Scholar", runUrl: "/api/ss/run",     pdfDir: "/pdfs/semanticscholar", color: "#fb923c" },
   { id: "echa",   label: "ECHA",             runUrl: "/api/echa/run",   pdfDir: "/pdfs/echa",            color: "#22d3ee" },
   { id: "ntp",    label: "NTP",              runUrl: "/api/ntp/run",    pdfDir: "/pdfs/ntp",             color: "#fbbf24" },
@@ -132,6 +133,7 @@ const DBS = [
   { id: "efsa",     label: "EFSA",         runUrl: "/api/efsa/run",     pdfDir: "/pdfs/EFSA",        color: "#06b6d4" },
   { id: "nite",     label: "NITE Japan",   runUrl: "/api/nite/run",     pdfDir: "/pdfs/NITE",        color: "#ef4444" },
   { id: "oecd",     label: "OECD eChem",   runUrl: "/api/oecd/run",     pdfDir: "/pdfs/OECD",        color: "#84cc16" },
+  { id: "pubmed",   label: "PubMed",       runUrl: "/api/pubmed/run",   pdfDir: "/pdfs/PubMed",      color: "#2563eb" },
 ];
 
 // Track which DBs are selected (all on by default)

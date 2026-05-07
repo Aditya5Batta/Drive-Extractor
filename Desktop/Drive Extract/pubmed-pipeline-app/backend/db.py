@@ -508,6 +508,10 @@ OecdRun         = _make_run_class  ("OecdRun",         "oecd_runs")
 OecdPaper       = _make_paper_class("OecdPaper",       "oecd_papers",       "oecd_runs")
 OecdActivityLog = _make_log_class  ("OecdActivityLog", "oecd_activity_logs", "oecd_runs")
 
+PubMedRun         = _make_run_class  ("PubMedRun",         "pubmed_runs")
+PubMedPaper       = _make_paper_class("PubMedPaper",       "pubmed_papers",       "pubmed_runs")
+PubMedActivityLog = _make_log_class  ("PubMedActivityLog", "pubmed_activity_logs", "pubmed_runs")
+
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 async def get_db():

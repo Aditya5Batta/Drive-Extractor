@@ -46,6 +46,7 @@ from db import (
     EfsaActivityLog, EfsaPaper, EfsaRun,
     NiteActivityLog, NitePaper, NiteRun,
     OecdActivityLog, OecdPaper, OecdRun,
+    PubMedActivityLog, PubMedPaper, PubMedRun,
     get_db, init_db,
 )
 from europepmc       import search as _epmc_search,   download_pdf as _epmc_download
@@ -64,6 +65,7 @@ from OpenAlex        import search as _openalex_search, download_pdf as _openale
 from EFSA            import search as _efsa_search, download_pdf as _efsa_download
 from NITE            import search as _nite_search, download_pdf as _nite_download
 from OECD            import search as _oecd_search, download_pdf as _oecd_download
+from PubMed          import search as _pubmed_search, download_pdf as _pubmed_download
 
 # ── paths ─────────────────────────────────────────────────────────────────────
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -84,13 +86,14 @@ PDF_DIR_OPENALEX = PDF_DIR / "OpenAlex"
 PDF_DIR_EFSA     = PDF_DIR / "EFSA"
 PDF_DIR_NITE     = PDF_DIR / "NITE"
 PDF_DIR_OECD     = PDF_DIR / "OECD"
+PDF_DIR_PUBMED   = PDF_DIR / "PubMed"
 FRONTEND         = PROJECT_ROOT / "frontend"
 
 for d in (PDF_DIR_EPMC, PDF_DIR_PMC, PDF_DIR_SS,
           PDF_DIR_ECHA, PDF_DIR_NTP, PDF_DIR_WHO, PDF_DIR_OEHHA,
           PDF_DIR_ATSDR, PDF_DIR_ZENODO, PDF_DIR_CANADA, PDF_DIR_CONCAWE,
           PDF_DIR_SAFEWORK, PDF_DIR_OPENALEX,
-          PDF_DIR_EFSA, PDF_DIR_NITE, PDF_DIR_OECD):
+          PDF_DIR_EFSA, PDF_DIR_NITE, PDF_DIR_OECD, PDF_DIR_PUBMED):
     d.mkdir(parents=True, exist_ok=True)
 
 
@@ -120,6 +123,7 @@ app.mount("/pdfs/OpenAlex",        StaticFiles(directory=str(PDF_DIR_OPENALEX)),
 app.mount("/pdfs/EFSA",            StaticFiles(directory=str(PDF_DIR_EFSA)),     name="pdfs_efsa")
 app.mount("/pdfs/NITE",            StaticFiles(directory=str(PDF_DIR_NITE)),     name="pdfs_nite")
 app.mount("/pdfs/OECD",            StaticFiles(directory=str(PDF_DIR_OECD)),     name="pdfs_oecd")
+app.mount("/pdfs/PubMed",          StaticFiles(directory=str(PDF_DIR_PUBMED)),   name="pdfs_pubmed")
 if FRONTEND.exists():
     app.mount("/static", StaticFiles(directory=str(FRONTEND)), name="static")
 
@@ -219,6 +223,12 @@ async def _nite_dl(p: dict, d: Path) -> dict:
 async def _oecd_dl(p: dict, d: Path) -> dict:
     return await _oecd_download("doc", "noid", p["pdf_urls"], d)
 
+async def _pubmed_dl(p: dict, d: Path) -> dict:
+    return await _pubmed_download(
+        pmcid=p.get("pmcid") or "unknown",
+        pmid=p.get("pmid") or "noid",
+        pdf_urls=p["pdf_urls"], pdf_dir=d)
+
 
 EPMC   = _DbDriver("RUN_",    PDF_DIR_EPMC,   _epmc_search,   _epmc_dl,
                    Run, Paper, ActivityLog, _epmc_extras)
@@ -252,6 +262,8 @@ NITE = _DbDriver("NITE_", PDF_DIR_NITE, _nite_search, _nite_dl,
                  NiteRun, NitePaper, NiteActivityLog, _epmc_extras)
 OECD = _DbDriver("OECD_", PDF_DIR_OECD, _oecd_search, _oecd_dl,
                  OecdRun, OecdPaper, OecdActivityLog, _epmc_extras)
+PUBMED = _DbDriver("PM_", PDF_DIR_PUBMED, _pubmed_search, _pubmed_dl,
+                   PubMedRun, PubMedPaper, PubMedActivityLog, _epmc_extras)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -543,6 +555,10 @@ async def run_nite(req: RunRequest, db: AsyncSession = Depends(get_db)):
 async def run_oecd(req: RunRequest, db: AsyncSession = Depends(get_db)):
     return await _run_pipeline(OECD, req, db)
 
+@app.post("/api/pubmed/run")
+async def run_pubmed(req: RunRequest, db: AsyncSession = Depends(get_db)):
+    return await _run_pipeline(PUBMED, req, db)
+
 
 # ── runs listings (one shared dict shape) ─────────────────────────────────────
 @app.get("/api/runs")
@@ -609,6 +625,10 @@ async def list_runs_nite(db: AsyncSession = Depends(get_db)):
 async def list_runs_oecd(db: AsyncSession = Depends(get_db)):
     return await _list_runs(db, OecdRun)
 
+@app.get("/api/pubmed/runs")
+async def list_runs_pubmed(db: AsyncSession = Depends(get_db)):
+    return await _list_runs(db, PubMedRun)
+
 
 async def _list_runs(db: AsyncSession, model) -> list[dict]:
     rows = (await db.execute(
@@ -668,6 +688,11 @@ async def health(db: AsyncSession = Depends(get_db)):
 # Dict shapers (one per row type — used by all 3 DBs)
 # ══════════════════════════════════════════════════════════════════════════════
 def _build_response(run_id, chemical, run, papers_out, ok, fail, skip, no_url=0):
+    # Return papers in their original search-result order (result_position
+    # ascending). Failed/no_url papers are kept so the UI shows the website's
+    # exact ranking — frontend handles missing PDFs gracefully (still renders
+    # title/View/DOI links, just without a download button).
+    ordered = sorted(papers_out, key=lambda p: p.get("result_position", 0))
     return {
         "run_id":   run_id,
         "chemical": chemical,
@@ -679,7 +704,7 @@ def _build_response(run_id, chemical, run, papers_out, ok, fail, skip, no_url=0)
             "started_at":   str(run.started_at),
             "finished_at":  str(run.finished_at),
         },
-        "papers": [p for p in papers_out if p.get("pdf_status") == "success"],
+        "papers": ordered,
     }
 
 
