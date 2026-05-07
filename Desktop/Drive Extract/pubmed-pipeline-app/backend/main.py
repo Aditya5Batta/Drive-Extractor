@@ -42,6 +42,7 @@ from db import (
     CanadaActivityLog, CanadaPaper, CanadaRun,
     ConcaweActivityLog, ConcawePaper, ConcaweRun,
     SafeWorkActivityLog, SafeWorkPaper, SafeWorkRun,
+    OpenAlexActivityLog, OpenAlexPaper, OpenAlexRun,
     get_db, init_db,
 )
 from europepmc       import search as _epmc_search,   download_pdf as _epmc_download
@@ -56,6 +57,7 @@ from Zenodo          import search as _zenodo_search, download_pdf as _zenodo_do
 from Canada_ca       import search as _canada_search, download_pdf as _canada_download
 from Concawe         import search as _concawe_search, download_pdf as _concawe_download
 from SafeWork_AU     import search as _safework_search, download_pdf as _safework_download
+from OpenAlex        import search as _openalex_search, download_pdf as _openalex_download
 
 # ── paths ─────────────────────────────────────────────────────────────────────
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -72,12 +74,13 @@ PDF_DIR_ZENODO   = PDF_DIR / "Zenodo"
 PDF_DIR_CANADA   = PDF_DIR / "Canada_ca"
 PDF_DIR_CONCAWE  = PDF_DIR / "Concawe"
 PDF_DIR_SAFEWORK = PDF_DIR / "SafeWork_AU"
+PDF_DIR_OPENALEX = PDF_DIR / "OpenAlex"
 FRONTEND         = PROJECT_ROOT / "frontend"
 
 for d in (PDF_DIR_EPMC, PDF_DIR_PMC, PDF_DIR_SS,
           PDF_DIR_ECHA, PDF_DIR_NTP, PDF_DIR_WHO, PDF_DIR_OEHHA,
           PDF_DIR_ATSDR, PDF_DIR_ZENODO, PDF_DIR_CANADA, PDF_DIR_CONCAWE,
-          PDF_DIR_SAFEWORK):
+          PDF_DIR_SAFEWORK, PDF_DIR_OPENALEX):
     d.mkdir(parents=True, exist_ok=True)
 
 
@@ -103,6 +106,7 @@ app.mount("/pdfs/Zenodo",          StaticFiles(directory=str(PDF_DIR_ZENODO)), n
 app.mount("/pdfs/Canada_ca",       StaticFiles(directory=str(PDF_DIR_CANADA)),  name="pdfs_canada")
 app.mount("/pdfs/Concawe",         StaticFiles(directory=str(PDF_DIR_CONCAWE)), name="pdfs_concawe")
 app.mount("/pdfs/SafeWork_AU",     StaticFiles(directory=str(PDF_DIR_SAFEWORK)), name="pdfs_safework")
+app.mount("/pdfs/OpenAlex",        StaticFiles(directory=str(PDF_DIR_OPENALEX)), name="pdfs_openalex")
 if FRONTEND.exists():
     app.mount("/static", StaticFiles(directory=str(FRONTEND)), name="static")
 
@@ -190,6 +194,9 @@ async def _concawe_dl(p: dict, d: Path) -> dict:
 async def _safework_dl(p: dict, d: Path) -> dict:
     return await _safework_download("doc", "noid", p["pdf_urls"], d)
 
+async def _openalex_dl(p: dict, d: Path) -> dict:
+    return await _openalex_download("doc", "noid", p["pdf_urls"], d)
+
 
 EPMC   = _DbDriver("RUN_",    PDF_DIR_EPMC,   _epmc_search,   _epmc_dl,
                    Run, Paper, ActivityLog, _epmc_extras)
@@ -215,6 +222,8 @@ CONCAWE = _DbDriver("CONC_",   PDF_DIR_CONCAWE, _concawe_search, _concawe_dl,
                     ConcaweRun, ConcawePaper, ConcaweActivityLog, _epmc_extras)
 SAFEWORK = _DbDriver("SWAU_", PDF_DIR_SAFEWORK, _safework_search, _safework_dl,
                      SafeWorkRun, SafeWorkPaper, SafeWorkActivityLog, _epmc_extras)
+OPENALEX = _DbDriver("OAX_",  PDF_DIR_OPENALEX, _openalex_search, _openalex_dl,
+                     OpenAlexRun, OpenAlexPaper, OpenAlexActivityLog, _epmc_extras)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -490,6 +499,10 @@ async def run_concawe(req: RunRequest, db: AsyncSession = Depends(get_db)):
 async def run_safework(req: RunRequest, db: AsyncSession = Depends(get_db)):
     return await _run_pipeline(SAFEWORK, req, db)
 
+@app.post("/api/openalex/run")
+async def run_openalex(req: RunRequest, db: AsyncSession = Depends(get_db)):
+    return await _run_pipeline(OPENALEX, req, db)
+
 
 # ── runs listings (one shared dict shape) ─────────────────────────────────────
 @app.get("/api/runs")
@@ -539,6 +552,10 @@ async def list_runs_concawe(db: AsyncSession = Depends(get_db)):
 @app.get("/api/safework/runs")
 async def list_runs_safework(db: AsyncSession = Depends(get_db)):
     return await _list_runs(db, SafeWorkRun)
+
+@app.get("/api/openalex/runs")
+async def list_runs_openalex(db: AsyncSession = Depends(get_db)):
+    return await _list_runs(db, OpenAlexRun)
 
 
 async def _list_runs(db: AsyncSession, model) -> list[dict]:

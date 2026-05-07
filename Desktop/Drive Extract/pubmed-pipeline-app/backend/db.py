@@ -492,6 +492,10 @@ SafeWorkRun         = _make_run_class  ("SafeWorkRun",         "safework_runs")
 SafeWorkPaper       = _make_paper_class("SafeWorkPaper",       "safework_papers",       "safework_runs")
 SafeWorkActivityLog = _make_log_class  ("SafeWorkActivityLog", "safework_activity_logs", "safework_runs")
 
+OpenAlexRun         = _make_run_class  ("OpenAlexRun",         "openalex_runs")
+OpenAlexPaper       = _make_paper_class("OpenAlexPaper",       "openalex_papers",       "openalex_runs")
+OpenAlexActivityLog = _make_log_class  ("OpenAlexActivityLog", "openalex_activity_logs", "openalex_runs")
+
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 async def get_db():
