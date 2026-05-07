@@ -496,6 +496,18 @@ OpenAlexRun         = _make_run_class  ("OpenAlexRun",         "openalex_runs")
 OpenAlexPaper       = _make_paper_class("OpenAlexPaper",       "openalex_papers",       "openalex_runs")
 OpenAlexActivityLog = _make_log_class  ("OpenAlexActivityLog", "openalex_activity_logs", "openalex_runs")
 
+EfsaRun         = _make_run_class  ("EfsaRun",         "efsa_runs")
+EfsaPaper       = _make_paper_class("EfsaPaper",       "efsa_papers",       "efsa_runs")
+EfsaActivityLog = _make_log_class  ("EfsaActivityLog", "efsa_activity_logs", "efsa_runs")
+
+NiteRun         = _make_run_class  ("NiteRun",         "nite_runs")
+NitePaper       = _make_paper_class("NitePaper",       "nite_papers",       "nite_runs")
+NiteActivityLog = _make_log_class  ("NiteActivityLog", "nite_activity_logs", "nite_runs")
+
+OecdRun         = _make_run_class  ("OecdRun",         "oecd_runs")
+OecdPaper       = _make_paper_class("OecdPaper",       "oecd_papers",       "oecd_runs")
+OecdActivityLog = _make_log_class  ("OecdActivityLog", "oecd_activity_logs", "oecd_runs")
+
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 async def get_db():

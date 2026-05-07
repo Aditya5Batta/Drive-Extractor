@@ -57,6 +57,9 @@
     .panel-header .db-name.concawe { color: #e879f9; }
     .panel-header .db-name.safework { color: #14b8a6; }
     .panel-header .db-name.openalex { color: #f59e0b; }
+    .panel-header .db-name.efsa     { color: #06b6d4; }
+    .panel-header .db-name.nite     { color: #ef4444; }
+    .panel-header .db-name.oecd     { color: #84cc16; }
     .panel-header label { font-size: 0.78rem; color: #64748b; display: flex; align-items: center; gap: 8px; }
     .panel-header input[type=number] { background: #0f1117; border: 1px solid #2d3148; border-radius: 6px; padding: 5px 8px; color: #e2e8f0; font-size: 0.85rem; width: 58px; outline: none; }
     .panel-body { padding: 16px 20px; min-height: 120px; }
@@ -126,6 +129,9 @@ const DBS = [
   { id: "concawe", label: "CONCAWE",   runUrl: "/api/concawe/run", pdfDir: "/pdfs/Concawe",   color: "#e879f9" },
   { id: "safework", label: "Safe Work AU", runUrl: "/api/safework/run", pdfDir: "/pdfs/SafeWork_AU", color: "#14b8a6" },
   { id: "openalex", label: "OpenAlex",     runUrl: "/api/openalex/run", pdfDir: "/pdfs/OpenAlex",    color: "#f59e0b" },
+  { id: "efsa",     label: "EFSA",         runUrl: "/api/efsa/run",     pdfDir: "/pdfs/EFSA",        color: "#06b6d4" },
+  { id: "nite",     label: "NITE Japan",   runUrl: "/api/nite/run",     pdfDir: "/pdfs/NITE",        color: "#ef4444" },
+  { id: "oecd",     label: "OECD eChem",   runUrl: "/api/oecd/run",     pdfDir: "/pdfs/OECD",        color: "#84cc16" },
 ];
 
 // Track which DBs are selected (all on by default)

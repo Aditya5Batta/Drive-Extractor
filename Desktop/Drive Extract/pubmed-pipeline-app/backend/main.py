@@ -43,6 +43,9 @@ from db import (
     ConcaweActivityLog, ConcawePaper, ConcaweRun,
     SafeWorkActivityLog, SafeWorkPaper, SafeWorkRun,
     OpenAlexActivityLog, OpenAlexPaper, OpenAlexRun,
+    EfsaActivityLog, EfsaPaper, EfsaRun,
+    NiteActivityLog, NitePaper, NiteRun,
+    OecdActivityLog, OecdPaper, OecdRun,
     get_db, init_db,
 )
 from europepmc       import search as _epmc_search,   download_pdf as _epmc_download
@@ -58,6 +61,9 @@ from Canada_ca       import search as _canada_search, download_pdf as _canada_do
 from Concawe         import search as _concawe_search, download_pdf as _concawe_download
 from SafeWork_AU     import search as _safework_search, download_pdf as _safework_download
 from OpenAlex        import search as _openalex_search, download_pdf as _openalex_download
+from EFSA            import search as _efsa_search, download_pdf as _efsa_download
+from NITE            import search as _nite_search, download_pdf as _nite_download
+from OECD            import search as _oecd_search, download_pdf as _oecd_download
 
 # ── paths ─────────────────────────────────────────────────────────────────────
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -75,12 +81,16 @@ PDF_DIR_CANADA   = PDF_DIR / "Canada_ca"
 PDF_DIR_CONCAWE  = PDF_DIR / "Concawe"
 PDF_DIR_SAFEWORK = PDF_DIR / "SafeWork_AU"
 PDF_DIR_OPENALEX = PDF_DIR / "OpenAlex"
+PDF_DIR_EFSA     = PDF_DIR / "EFSA"
+PDF_DIR_NITE     = PDF_DIR / "NITE"
+PDF_DIR_OECD     = PDF_DIR / "OECD"
 FRONTEND         = PROJECT_ROOT / "frontend"
 
 for d in (PDF_DIR_EPMC, PDF_DIR_PMC, PDF_DIR_SS,
           PDF_DIR_ECHA, PDF_DIR_NTP, PDF_DIR_WHO, PDF_DIR_OEHHA,
           PDF_DIR_ATSDR, PDF_DIR_ZENODO, PDF_DIR_CANADA, PDF_DIR_CONCAWE,
-          PDF_DIR_SAFEWORK, PDF_DIR_OPENALEX):
+          PDF_DIR_SAFEWORK, PDF_DIR_OPENALEX,
+          PDF_DIR_EFSA, PDF_DIR_NITE, PDF_DIR_OECD):
     d.mkdir(parents=True, exist_ok=True)
 
 
@@ -107,6 +117,9 @@ app.mount("/pdfs/Canada_ca",       StaticFiles(directory=str(PDF_DIR_CANADA)),  
 app.mount("/pdfs/Concawe",         StaticFiles(directory=str(PDF_DIR_CONCAWE)), name="pdfs_concawe")
 app.mount("/pdfs/SafeWork_AU",     StaticFiles(directory=str(PDF_DIR_SAFEWORK)), name="pdfs_safework")
 app.mount("/pdfs/OpenAlex",        StaticFiles(directory=str(PDF_DIR_OPENALEX)), name="pdfs_openalex")
+app.mount("/pdfs/EFSA",            StaticFiles(directory=str(PDF_DIR_EFSA)),     name="pdfs_efsa")
+app.mount("/pdfs/NITE",            StaticFiles(directory=str(PDF_DIR_NITE)),     name="pdfs_nite")
+app.mount("/pdfs/OECD",            StaticFiles(directory=str(PDF_DIR_OECD)),     name="pdfs_oecd")
 if FRONTEND.exists():
     app.mount("/static", StaticFiles(directory=str(FRONTEND)), name="static")
 
@@ -197,6 +210,15 @@ async def _safework_dl(p: dict, d: Path) -> dict:
 async def _openalex_dl(p: dict, d: Path) -> dict:
     return await _openalex_download("doc", "noid", p["pdf_urls"], d)
 
+async def _efsa_dl(p: dict, d: Path) -> dict:
+    return await _efsa_download("doc", "noid", p["pdf_urls"], d)
+
+async def _nite_dl(p: dict, d: Path) -> dict:
+    return await _nite_download("doc", "noid", p["pdf_urls"], d)
+
+async def _oecd_dl(p: dict, d: Path) -> dict:
+    return await _oecd_download("doc", "noid", p["pdf_urls"], d)
+
 
 EPMC   = _DbDriver("RUN_",    PDF_DIR_EPMC,   _epmc_search,   _epmc_dl,
                    Run, Paper, ActivityLog, _epmc_extras)
@@ -224,6 +246,12 @@ SAFEWORK = _DbDriver("SWAU_", PDF_DIR_SAFEWORK, _safework_search, _safework_dl,
                      SafeWorkRun, SafeWorkPaper, SafeWorkActivityLog, _epmc_extras)
 OPENALEX = _DbDriver("OAX_",  PDF_DIR_OPENALEX, _openalex_search, _openalex_dl,
                      OpenAlexRun, OpenAlexPaper, OpenAlexActivityLog, _epmc_extras)
+EFSA = _DbDriver("EFSA_", PDF_DIR_EFSA, _efsa_search, _efsa_dl,
+                 EfsaRun, EfsaPaper, EfsaActivityLog, _epmc_extras)
+NITE = _DbDriver("NITE_", PDF_DIR_NITE, _nite_search, _nite_dl,
+                 NiteRun, NitePaper, NiteActivityLog, _epmc_extras)
+OECD = _DbDriver("OECD_", PDF_DIR_OECD, _oecd_search, _oecd_dl,
+                 OecdRun, OecdPaper, OecdActivityLog, _epmc_extras)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -503,6 +531,18 @@ async def run_safework(req: RunRequest, db: AsyncSession = Depends(get_db)):
 async def run_openalex(req: RunRequest, db: AsyncSession = Depends(get_db)):
     return await _run_pipeline(OPENALEX, req, db)
 
+@app.post("/api/efsa/run")
+async def run_efsa(req: RunRequest, db: AsyncSession = Depends(get_db)):
+    return await _run_pipeline(EFSA, req, db)
+
+@app.post("/api/nite/run")
+async def run_nite(req: RunRequest, db: AsyncSession = Depends(get_db)):
+    return await _run_pipeline(NITE, req, db)
+
+@app.post("/api/oecd/run")
+async def run_oecd(req: RunRequest, db: AsyncSession = Depends(get_db)):
+    return await _run_pipeline(OECD, req, db)
+
 
 # ── runs listings (one shared dict shape) ─────────────────────────────────────
 @app.get("/api/runs")
@@ -556,6 +596,18 @@ async def list_runs_safework(db: AsyncSession = Depends(get_db)):
 @app.get("/api/openalex/runs")
 async def list_runs_openalex(db: AsyncSession = Depends(get_db)):
     return await _list_runs(db, OpenAlexRun)
+
+@app.get("/api/efsa/runs")
+async def list_runs_efsa(db: AsyncSession = Depends(get_db)):
+    return await _list_runs(db, EfsaRun)
+
+@app.get("/api/nite/runs")
+async def list_runs_nite(db: AsyncSession = Depends(get_db)):
+    return await _list_runs(db, NiteRun)
+
+@app.get("/api/oecd/runs")
+async def list_runs_oecd(db: AsyncSession = Depends(get_db)):
+    return await _list_runs(db, OecdRun)
 
 
 async def _list_runs(db: AsyncSession, model) -> list[dict]:
