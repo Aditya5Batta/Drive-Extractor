@@ -10,34 +10,52 @@
 
     header { background: #1a1d27; border-bottom: 1px solid #2d3148; padding: 16px 32px; display: flex; align-items: center; gap: 12px; }
     header h1 { font-size: 1.15rem; font-weight: 600; color: #a78bfa; }
-    header span { font-size: 0.78rem; color: #475569; }
 
     .container { max-width: 1400px; margin: 0 auto; padding: 28px 24px; }
 
-    /* ── Search bar ── */
+    /* ── Search card ── */
     .search-card { background: #1a1d27; border: 1px solid #2d3148; border-radius: 12px; padding: 24px 28px; margin-bottom: 24px; }
-    .search-row { display: flex; gap: 12px; align-items: center; }
+    .search-row { display: flex; gap: 12px; align-items: center; margin-bottom: 18px; }
     .search-row input[type=text] { flex: 1; background: #0f1117; border: 1px solid #2d3148; border-radius: 8px; padding: 11px 16px; font-size: 1rem; color: #e2e8f0; outline: none; transition: border-color 0.2s; }
     .search-row input[type=text]:focus { border-color: #7c3aed; }
     .search-row input[type=text]::placeholder { color: #475569; }
-    .run-btn { background: #7c3aed; color: #fff; border: none; border-radius: 8px; padding: 11px 32px; font-size: 0.95rem; font-weight: 600; cursor: pointer; transition: background 0.2s; white-space: nowrap; }
+    .run-btn { background: #7c3aed; color: #fff; border: none; border-radius: 8px; padding: 11px 28px; font-size: 0.95rem; font-weight: 600; cursor: pointer; transition: background 0.2s; white-space: nowrap; }
     .run-btn:hover:not(:disabled) { background: #6d28d9; }
     .run-btn:disabled { background: #3b3f5c; cursor: not-allowed; }
+    .sel-btn { background: transparent; color: #64748b; border: 1px solid #2d3148; border-radius: 8px; padding: 10px 16px; font-size: 0.82rem; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
+    .sel-btn:hover { color: #e2e8f0; border-color: #475569; }
 
-    /* ── Six-panel grid (3×2) ── */
+    /* ── DB selector checkboxes ── */
+    .db-selector { display: flex; flex-wrap: wrap; gap: 8px; }
+    .db-check { display: flex; align-items: center; gap: 6px; background: #0f1117; border: 1px solid #1e293b; border-radius: 8px; padding: 7px 12px; cursor: pointer; transition: border-color 0.2s; user-select: none; }
+    .db-check:hover { border-color: #334155; }
+    .db-check.active { border-color: currentColor; }
+    .db-check input[type=checkbox] { display: none; }
+    .db-check .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; opacity: 0.4; transition: opacity 0.2s; }
+    .db-check.active .dot { opacity: 1; }
+    .db-check .lbl { font-size: 0.8rem; font-weight: 600; }
+
+    /* ── Panels grid ── */
     .panels { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
     @media (max-width: 1100px) { .panels { grid-template-columns: 1fr 1fr; } }
     @media (max-width: 680px)  { .panels { grid-template-columns: 1fr; } }
 
     .panel { background: #1a1d27; border: 1px solid #2d3148; border-radius: 12px; overflow: hidden; }
+    .panel.hidden { display: none; }
     .panel-header { padding: 14px 20px; border-bottom: 1px solid #2d3148; display: flex; align-items: center; justify-content: space-between; }
     .panel-header .db-name { font-size: 0.9rem; font-weight: 700; }
-    .panel-header .db-name.epmc { color: #60a5fa; }   /* blue   */
-    .panel-header .db-name.pmc  { color: #34d399; }   /* green  */
-    .panel-header .db-name.ss   { color: #fb923c; }   /* orange */
-    .panel-header .db-name.echa { color: #22d3ee; }   /* cyan   */
-    .panel-header .db-name.ntp  { color: #fbbf24; }   /* gold   */
-    .panel-header .db-name.who  { color: #f472b6; }   /* pink   */
+    .panel-header .db-name.epmc   { color: #60a5fa; }
+    .panel-header .db-name.pmc    { color: #34d399; }
+    .panel-header .db-name.ss     { color: #fb923c; }
+    .panel-header .db-name.echa   { color: #22d3ee; }
+    .panel-header .db-name.ntp    { color: #fbbf24; }
+    .panel-header .db-name.who    { color: #f472b6; }
+    .panel-header .db-name.oehha  { color: #c084fc; }
+    .panel-header .db-name.atsdr  { color: #38bdf8; }
+    .panel-header .db-name.zenodo  { color: #a3e635; }
+    .panel-header .db-name.canada  { color: #f97316; }
+    .panel-header .db-name.concawe { color: #e879f9; }
+    .panel-header .db-name.safework { color: #14b8a6; }
     .panel-header label { font-size: 0.78rem; color: #64748b; display: flex; align-items: center; gap: 8px; }
     .panel-header input[type=number] { background: #0f1117; border: 1px solid #2d3148; border-radius: 6px; padding: 5px 8px; color: #e2e8f0; font-size: 0.85rem; width: 58px; outline: none; }
     .panel-body { padding: 16px 20px; min-height: 120px; }
@@ -63,18 +81,6 @@
     .paper-info .ids   { font-size: 0.7rem; color: #334155; margin-top: 2px; font-family: monospace; }
     .empty-msg { color: #374151; font-size: 0.82rem; text-align: center; padding: 24px 0; }
 
-    .history-section { margin-top: 28px; }
-    .section-title { font-size: 0.72rem; color: #475569; text-transform: uppercase; letter-spacing: .1em; margin-bottom: 10px; }
-    .history-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
-    @media (max-width: 1100px) { .history-grid { grid-template-columns: 1fr 1fr; } }
-    @media (max-width: 680px)  { .history-grid { grid-template-columns: 1fr; } }
-    .history-grid h4 { font-size:0.72rem; margin-bottom:8px; font-weight:600; }
-    .run-row { background: #1a1d27; border: 1px solid #2d3148; border-radius: 7px; padding: 10px 14px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; }
-    .run-row:hover { border-color: #7c3aed; }
-    .run-row .chem { font-weight: 600; font-size: 0.88rem; }
-    .run-row .meta { font-size: 0.73rem; color: #475569; margin-top: 2px; }
-    .run-badge { font-size: 0.7rem; padding: 2px 9px; border-radius: 4px; font-weight: 700; }
-
     .spinner { display: inline-block; width: 13px; height: 13px; border: 2px solid #4b5563; border-top-color: #7c3aed; border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; margin-right: 6px; }
     @keyframes spin { to { transform: rotate(360deg); } }
   </style>
@@ -83,51 +89,62 @@
 
 <header>
   <h1>PDF Pipeline</h1>
-  <span>EuropePMC · PubMed Central · Semantic Scholar · ECHA · NTP · WHO IPCS — parallel search</span>
 </header>
 
 <div class="container">
 
-  <!-- Search bar -->
+  <!-- Search + DB selector card -->
   <div class="search-card">
     <div class="search-row">
       <input type="text" id="chemical-input" placeholder="Enter chemical name  e.g. Benzene, Toluene, Aspirin, Formaldehyde…" />
-      <button class="run-btn" id="run-btn" onclick="runAll()">Run All</button>
+      <button class="sel-btn" onclick="selectAll()">All</button>
+      <button class="sel-btn" onclick="selectNone()">None</button>
+      <button class="run-btn" id="run-btn" onclick="runSelected()">Run</button>
     </div>
+    <!-- DB checkboxes -->
+    <div class="db-selector" id="db-selector"></div>
   </div>
 
-  <!-- Six panels — populated by JS -->
+  <!-- Panels — populated by JS, hidden when DB unchecked -->
   <div class="panels" id="panels"></div>
-
-  <!-- History — six columns -->
-  <div class="history-section">
-    <div class="section-title">Recent Runs</div>
-    <div class="history-grid" id="history-grid"></div>
-  </div>
 
 </div>
 
 <script>
-// ── Database registry ────────────────────────────────────────────────────────
-// One config row per DB.  Adding a new DB later = add one entry here.
 const DBS = [
-  { id: "epmc", label: "EuropePMC",        runUrl: "/api/run",      listUrl: "/api/runs",      pdfDir: "/pdfs/europepmc",       color: "#60a5fa" },
-  { id: "pmc",  label: "PubMed Central",   runUrl: "/api/pmc/run",  listUrl: "/api/pmc/runs",  pdfDir: "/pdfs/pmc",             color: "#34d399" },
-  { id: "ss",   label: "Semantic Scholar", runUrl: "/api/ss/run",   listUrl: "/api/ss/runs",   pdfDir: "/pdfs/semanticscholar", color: "#fb923c" },
-  { id: "echa", label: "ECHA",             runUrl: "/api/echa/run", listUrl: "/api/echa/runs", pdfDir: "/pdfs/echa",            color: "#22d3ee" },
-  { id: "ntp",  label: "NTP",              runUrl: "/api/ntp/run",  listUrl: "/api/ntp/runs",  pdfDir: "/pdfs/ntp",             color: "#fbbf24" },
-  { id: "who",  label: "WHO IPCS",         runUrl: "/api/who/run",  listUrl: "/api/who/runs",  pdfDir: "/pdfs/who_ipcs",        color: "#f472b6" },
+  { id: "epmc",   label: "EuropePMC",        runUrl: "/api/run",        pdfDir: "/pdfs/europepmc",       color: "#60a5fa" },
+  { id: "pmc",    label: "PubMed Central",   runUrl: "/api/pmc/run",    pdfDir: "/pdfs/pmc",             color: "#34d399" },
+  { id: "ss",     label: "Semantic Scholar", runUrl: "/api/ss/run",     pdfDir: "/pdfs/semanticscholar", color: "#fb923c" },
+  { id: "echa",   label: "ECHA",             runUrl: "/api/echa/run",   pdfDir: "/pdfs/echa",            color: "#22d3ee" },
+  { id: "ntp",    label: "NTP",              runUrl: "/api/ntp/run",    pdfDir: "/pdfs/ntp",             color: "#fbbf24" },
+  { id: "who",    label: "WHO IPCS",         runUrl: "/api/who/run",    pdfDir: "/pdfs/who_ipcs",        color: "#f472b6" },
+  { id: "oehha",  label: "OEHHA",            runUrl: "/api/oehha/run",  pdfDir: "/pdfs/OEHHA",           color: "#c084fc" },
+  { id: "atsdr",  label: "ATSDR",            runUrl: "/api/atsdr/run",  pdfDir: "/pdfs/ATSDR",           color: "#38bdf8" },
+  { id: "zenodo", label: "Zenodo",           runUrl: "/api/zenodo/run", pdfDir: "/pdfs/Zenodo",          color: "#a3e635" },
+  { id: "canada",  label: "Canada.ca", runUrl: "/api/canada/run",  pdfDir: "/pdfs/Canada_ca", color: "#f97316" },
+  { id: "concawe", label: "CONCAWE",   runUrl: "/api/concawe/run", pdfDir: "/pdfs/Concawe",   color: "#e879f9" },
+  { id: "safework", label: "Safe Work AU", runUrl: "/api/safework/run", pdfDir: "/pdfs/SafeWork_AU", color: "#14b8a6" },
 ];
-const dbById = Object.fromEntries(DBS.map(d => [d.id, d]));
 
-// ── Build panels & history columns dynamically ────────────────────────────────
+// Track which DBs are selected (all on by default)
+const selected = new Set(DBS.map(d => d.id));
+
 document.addEventListener("DOMContentLoaded", () => {
+  // Build DB checkboxes
+  const sel = document.getElementById("db-selector");
+  sel.innerHTML = DBS.map(d => `
+    <div class="db-check active" id="chk-${d.id}" style="color:${d.color}" onclick="toggleDb('${d.id}')">
+      <span class="dot"></span>
+      <span class="lbl">${d.label}</span>
+    </div>`).join("");
+
+  // Build panels
   const panels = document.getElementById("panels");
   panels.innerHTML = DBS.map(d => `
-    <div class="panel">
+    <div class="panel" id="panel-${d.id}">
       <div class="panel-header">
         <span class="db-name ${d.id}">${d.label}</span>
-        <label>PDFs to download
+        <label>PDFs
           <input type="number" id="${d.id}-max-pdfs" value="10" min="1" max="25" />
         </label>
       </div>
@@ -138,29 +155,53 @@ document.addEventListener("DOMContentLoaded", () => {
       </div>
     </div>`).join("");
 
-  const hist = document.getElementById("history-grid");
-  hist.innerHTML = DBS.map(d => `
-    <div>
-      <h4 style="color:${d.color}">${d.label.toUpperCase()}</h4>
-      <div id="${d.id}-history"><span class="empty-msg">Loading…</span></div>
-    </div>`).join("");
-
-  loadHistory();
   document.getElementById("chemical-input").addEventListener("keydown", e => {
-    if (e.key === "Enter") runAll();
+    if (e.key === "Enter") runSelected();
   });
 });
 
-// ── Fire all DBs in parallel ──────────────────────────────────────────────────
+function toggleDb(id) {
+  const lbl = document.getElementById(`chk-${id}`);
+  const panel = document.getElementById(`panel-${id}`);
+  if (selected.has(id)) {
+    selected.delete(id);
+    lbl.classList.remove("active");
+    panel.classList.add("hidden");
+  } else {
+    selected.add(id);
+    lbl.classList.add("active");
+    panel.classList.remove("hidden");
+  }
+}
+
+function selectAll() {
+  DBS.forEach(d => {
+    selected.add(d.id);
+    document.getElementById(`chk-${d.id}`).classList.add("active");
+    document.getElementById(`panel-${d.id}`).classList.remove("hidden");
+  });
+}
+
+function selectNone() {
+  DBS.forEach(d => {
+    selected.delete(d.id);
+    document.getElementById(`chk-${d.id}`).classList.remove("active");
+    document.getElementById(`panel-${d.id}`).classList.add("hidden");
+  });
+}
+
 let _pending = 0;
-function runAll() {
+
+function runSelected() {
   const chemical = document.getElementById("chemical-input").value.trim();
   if (!chemical) { alert("Please enter a chemical name."); return; }
+  if (selected.size === 0) { alert("Please select at least one database."); return; }
 
   document.getElementById("run-btn").disabled = true;
   _pending = 0;
 
   for (const d of DBS) {
+    if (!selected.has(d.id)) continue;
     const max_pdfs = parseInt(document.getElementById(`${d.id}-max-pdfs`).value) || 10;
     resetPanel(d.id);
     runPanel(d, { chemical, max_pdfs }).finally(checkAllDone);
@@ -170,7 +211,7 @@ function runAll() {
 function resetPanel(id) {
   setStatus(id, "running", "Searching…");
   document.getElementById(`${id}-chips`).style.display = "none";
-  document.getElementById(`${id}-results`).innerHTML  = "";
+  document.getElementById(`${id}-results`).innerHTML = "";
   _pending++;
 }
 
@@ -191,13 +232,10 @@ async function runPanel(d, body) {
     });
     const data = await res.json();
     const s    = data.summary || {};
-
     renderChips(d.id, s);
     renderPapers(d, data.papers || []);
     setStatus(d.id, data.status,
       `Run ${data.run_id} · ${s.pdfs_success ?? 0} saved · ${s.pdfs_failed ?? 0} failed · ${(s.duration_s || 0).toFixed(1)}s`);
-
-    loadHistory();
   } catch (err) {
     setStatus(d.id, "failed", "Error: " + err.message);
   }
@@ -224,10 +262,7 @@ function renderChips(id, s) {
 
 function renderPapers(d, papers) {
   const el = document.getElementById(`${d.id}-results`);
-  if (!papers.length) {
-    el.innerHTML = `<div class="empty-msg">No PDFs found</div>`;
-    return;
-  }
+  if (!papers.length) { el.innerHTML = `<div class="empty-msg">No PDFs found</div>`; return; }
   el.innerHTML = `<div class="section-lbl">Downloaded PDFs</div>` +
     papers.map((p, i) => {
       const meta  = [p.journal, p.year].filter(Boolean).join(" · ");
@@ -238,10 +273,7 @@ function renderPapers(d, papers) {
         p.doi      ? `<a href="https://doi.org/${p.doi}" target="_blank">DOI</a>` : "",
         fname      ? `<a href="${d.pdfDir}/${encodeURIComponent(fname)}" target="_blank">⬇ PDF${size}</a>` : "",
       ].filter(Boolean).join("  ·  ");
-      const ids = [
-        p.pmcid ? p.pmcid : "",
-        p.pmid  ? "PMID " + p.pmid : "",
-      ].filter(Boolean).join("  ·  ");
+      const ids = [p.pmcid || "", p.pmid ? "PMID " + p.pmid : ""].filter(Boolean).join("  ·  ");
       return `<div class="paper-card">
         <div class="num">${i + 1}</div>
         <div class="paper-info">
@@ -256,37 +288,6 @@ function renderPapers(d, papers) {
 function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, c =>
     ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c]));
-}
-
-// ── History — fetch every DB's runs in parallel ──────────────────────────────
-async function loadHistory() {
-  try {
-    const allRuns = await Promise.all(DBS.map(d =>
-      fetch(d.listUrl).then(r => r.ok ? r.json() : []).catch(() => [])
-    ));
-    DBS.forEach((d, i) => renderHistory(`${d.id}-history`, allRuns[i]));
-  } catch (_) {}
-}
-
-function renderHistory(elId, runs) {
-  const el = document.getElementById(elId);
-  if (!runs || !runs.length) {
-    el.innerHTML = `<span class="empty-msg">No runs yet.</span>`;
-    return;
-  }
-  el.innerHTML = runs.slice(0, 8).map(r => {
-    const col = r.status === "success" ? "#4ade80" : r.status === "failed" ? "#f87171" : "#94a3b8";
-    const bg  = r.status === "success" ? "#052e16" : r.status === "failed" ? "#2d0a0a" : "#1e293b";
-    const dur = r.duration_s ? r.duration_s.toFixed(1) + "s" : "—";
-    const dt  = r.started_at ? new Date(r.started_at).toLocaleString() : "";
-    return `<div class="run-row">
-      <div>
-        <div class="chem">${escapeHtml(r.chemical)}</div>
-        <div class="meta">${r.run_id} · ${dt} · ${dur} · ${r.pdfs_success ?? 0} PDFs saved</div>
-      </div>
-      <span class="run-badge" style="background:${bg};color:${col}">${r.status}</span>
-    </div>`;
-  }).join("");
 }
 </script>
 </body>

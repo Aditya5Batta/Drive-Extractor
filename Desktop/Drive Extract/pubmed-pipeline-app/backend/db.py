@@ -468,6 +468,30 @@ WhoRun          = _make_run_class  ("WhoRun",          "who_runs")
 WhoPaper        = _make_paper_class("WhoPaper",        "who_papers",        "who_runs")
 WhoActivityLog  = _make_log_class  ("WhoActivityLog",  "who_activity_logs", "who_runs")
 
+OehhaRun         = _make_run_class  ("OehhaRun",         "oehha_runs")
+OehhaPaper       = _make_paper_class("OehhaPaper",       "oehha_papers",       "oehha_runs")
+OehhaActivityLog = _make_log_class  ("OehhaActivityLog", "oehha_activity_logs", "oehha_runs")
+
+AtsdrRun         = _make_run_class  ("AtsdrRun",         "atsdr_runs")
+AtsdrPaper       = _make_paper_class("AtsdrPaper",       "atsdr_papers",       "atsdr_runs")
+AtsdrActivityLog = _make_log_class  ("AtsdrActivityLog", "atsdr_activity_logs", "atsdr_runs")
+
+ZenodoRun         = _make_run_class  ("ZenodoRun",         "zenodo_runs")
+ZenodoPaper       = _make_paper_class("ZenodoPaper",       "zenodo_papers",       "zenodo_runs")
+ZenodoActivityLog = _make_log_class  ("ZenodoActivityLog", "zenodo_activity_logs", "zenodo_runs")
+
+CanadaRun         = _make_run_class  ("CanadaRun",         "canada_runs")
+CanadaPaper       = _make_paper_class("CanadaPaper",       "canada_papers",       "canada_runs")
+CanadaActivityLog = _make_log_class  ("CanadaActivityLog", "canada_activity_logs", "canada_runs")
+
+ConcaweRun         = _make_run_class  ("ConcaweRun",         "concawe_runs")
+ConcawePaper       = _make_paper_class("ConcawePaper",       "concawe_papers",       "concawe_runs")
+ConcaweActivityLog = _make_log_class  ("ConcaweActivityLog", "concawe_activity_logs", "concawe_runs")
+
+SafeWorkRun         = _make_run_class  ("SafeWorkRun",         "safework_runs")
+SafeWorkPaper       = _make_paper_class("SafeWorkPaper",       "safework_papers",       "safework_runs")
+SafeWorkActivityLog = _make_log_class  ("SafeWorkActivityLog", "safework_activity_logs", "safework_runs")
+
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 async def get_db():

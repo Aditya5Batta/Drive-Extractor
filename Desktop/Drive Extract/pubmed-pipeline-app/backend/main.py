@@ -30,20 +30,32 @@ from sqlalchemy import desc, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db import (
-    ActivityLog,     Paper,     Run,
-    PmcActivityLog,  PmcPaper,  PmcRun,
-    SsActivityLog,   SsPaper,   SsRun,
-    EchaActivityLog, EchaPaper, EchaRun,
-    NtpActivityLog,  NtpPaper,  NtpRun,
-    WhoActivityLog,  WhoPaper,  WhoRun,
+    ActivityLog,      Paper,      Run,
+    PmcActivityLog,   PmcPaper,   PmcRun,
+    SsActivityLog,    SsPaper,    SsRun,
+    EchaActivityLog,  EchaPaper,  EchaRun,
+    NtpActivityLog,   NtpPaper,   NtpRun,
+    WhoActivityLog,   WhoPaper,   WhoRun,
+    OehhaActivityLog,  OehhaPaper,  OehhaRun,
+    AtsdrActivityLog,  AtsdrPaper,  AtsdrRun,
+    ZenodoActivityLog, ZenodoPaper, ZenodoRun,
+    CanadaActivityLog, CanadaPaper, CanadaRun,
+    ConcaweActivityLog, ConcawePaper, ConcaweRun,
+    SafeWorkActivityLog, SafeWorkPaper, SafeWorkRun,
     get_db, init_db,
 )
-from europepmc       import search as _epmc_search, download_pdf as _epmc_download
-from pmc             import search as _pmc_search,  download_pdf as _pmc_download
-from semanticscholar import search as _ss_search,   download_pdf as _ss_download
-from echa            import search as _echa_search, download_pdf as _echa_download
-from ntp             import search as _ntp_search,  download_pdf as _ntp_download
-from who_ipcs        import search as _who_search,  download_pdf as _who_download
+from europepmc       import search as _epmc_search,   download_pdf as _epmc_download
+from pmc             import search as _pmc_search,    download_pdf as _pmc_download
+from semanticscholar import search as _ss_search,     download_pdf as _ss_download
+from echa            import search as _echa_search,   download_pdf as _echa_download
+from ntp             import search as _ntp_search,    download_pdf as _ntp_download
+from who_ipcs        import search as _who_search,    download_pdf as _who_download
+from OEHHA           import search as _oehha_search,  download_pdf as _oehha_download
+from ATSDR           import search as _atsdr_search,  download_pdf as _atsdr_download
+from Zenodo          import search as _zenodo_search, download_pdf as _zenodo_download
+from Canada_ca       import search as _canada_search, download_pdf as _canada_download
+from Concawe         import search as _concawe_search, download_pdf as _concawe_download
+from SafeWork_AU     import search as _safework_search, download_pdf as _safework_download
 
 # ── paths ─────────────────────────────────────────────────────────────────────
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -51,13 +63,21 @@ PDF_DIR      = PROJECT_ROOT / "pdfs"
 PDF_DIR_EPMC = PDF_DIR / "europepmc"
 PDF_DIR_PMC  = PDF_DIR / "pmc"
 PDF_DIR_SS   = PDF_DIR / "semanticscholar"
-PDF_DIR_ECHA = PDF_DIR / "echa"
-PDF_DIR_NTP  = PDF_DIR / "ntp"
-PDF_DIR_WHO  = PDF_DIR / "who_ipcs"
-FRONTEND     = PROJECT_ROOT / "frontend"
+PDF_DIR_ECHA  = PDF_DIR / "echa"
+PDF_DIR_NTP   = PDF_DIR / "ntp"
+PDF_DIR_WHO   = PDF_DIR / "who_ipcs"
+PDF_DIR_OEHHA  = PDF_DIR / "OEHHA"
+PDF_DIR_ATSDR  = PDF_DIR / "ATSDR"
+PDF_DIR_ZENODO   = PDF_DIR / "Zenodo"
+PDF_DIR_CANADA   = PDF_DIR / "Canada_ca"
+PDF_DIR_CONCAWE  = PDF_DIR / "Concawe"
+PDF_DIR_SAFEWORK = PDF_DIR / "SafeWork_AU"
+FRONTEND         = PROJECT_ROOT / "frontend"
 
 for d in (PDF_DIR_EPMC, PDF_DIR_PMC, PDF_DIR_SS,
-          PDF_DIR_ECHA, PDF_DIR_NTP, PDF_DIR_WHO):
+          PDF_DIR_ECHA, PDF_DIR_NTP, PDF_DIR_WHO, PDF_DIR_OEHHA,
+          PDF_DIR_ATSDR, PDF_DIR_ZENODO, PDF_DIR_CANADA, PDF_DIR_CONCAWE,
+          PDF_DIR_SAFEWORK):
     d.mkdir(parents=True, exist_ok=True)
 
 
@@ -74,9 +94,15 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"],
 app.mount("/pdfs/europepmc",       StaticFiles(directory=str(PDF_DIR_EPMC)), name="pdfs_epmc")
 app.mount("/pdfs/pmc",             StaticFiles(directory=str(PDF_DIR_PMC)),  name="pdfs_pmc")
 app.mount("/pdfs/semanticscholar", StaticFiles(directory=str(PDF_DIR_SS)),   name="pdfs_ss")
-app.mount("/pdfs/echa",            StaticFiles(directory=str(PDF_DIR_ECHA)), name="pdfs_echa")
-app.mount("/pdfs/ntp",             StaticFiles(directory=str(PDF_DIR_NTP)),  name="pdfs_ntp")
-app.mount("/pdfs/who_ipcs",        StaticFiles(directory=str(PDF_DIR_WHO)),  name="pdfs_who")
+app.mount("/pdfs/echa",            StaticFiles(directory=str(PDF_DIR_ECHA)),  name="pdfs_echa")
+app.mount("/pdfs/ntp",             StaticFiles(directory=str(PDF_DIR_NTP)),   name="pdfs_ntp")
+app.mount("/pdfs/who_ipcs",        StaticFiles(directory=str(PDF_DIR_WHO)),   name="pdfs_who")
+app.mount("/pdfs/OEHHA",           StaticFiles(directory=str(PDF_DIR_OEHHA)),  name="pdfs_oehha")
+app.mount("/pdfs/ATSDR",           StaticFiles(directory=str(PDF_DIR_ATSDR)),  name="pdfs_atsdr")
+app.mount("/pdfs/Zenodo",          StaticFiles(directory=str(PDF_DIR_ZENODO)), name="pdfs_zenodo")
+app.mount("/pdfs/Canada_ca",       StaticFiles(directory=str(PDF_DIR_CANADA)),  name="pdfs_canada")
+app.mount("/pdfs/Concawe",         StaticFiles(directory=str(PDF_DIR_CONCAWE)), name="pdfs_concawe")
+app.mount("/pdfs/SafeWork_AU",     StaticFiles(directory=str(PDF_DIR_SAFEWORK)), name="pdfs_safework")
 if FRONTEND.exists():
     app.mount("/static", StaticFiles(directory=str(FRONTEND)), name="static")
 
@@ -146,19 +172,49 @@ async def _ntp_dl(p: dict, d: Path) -> dict:
 async def _who_dl(p: dict, d: Path) -> dict:
     return await _who_download("doc", "noid", p["pdf_urls"], d)
 
+async def _oehha_dl(p: dict, d: Path) -> dict:
+    return await _oehha_download("doc", "noid", p["pdf_urls"], d)
 
-EPMC = _DbDriver("RUN_",  PDF_DIR_EPMC, _epmc_search, _epmc_dl,
-                 Run, Paper, ActivityLog, _epmc_extras)
-PMC  = _DbDriver("PMC_",  PDF_DIR_PMC,  _pmc_search,  _pmc_dl,
-                 PmcRun, PmcPaper, PmcActivityLog, _epmc_extras)
-SS   = _DbDriver("SS_",   PDF_DIR_SS,   _ss_search,   _ss_dl,
-                 SsRun, SsPaper, SsActivityLog, _ss_extras)
-ECHA = _DbDriver("ECHA_", PDF_DIR_ECHA, _echa_search, _echa_dl,
-                 EchaRun, EchaPaper, EchaActivityLog, _epmc_extras)
-NTP  = _DbDriver("NTP_",  PDF_DIR_NTP,  _ntp_search,  _ntp_dl,
-                 NtpRun, NtpPaper, NtpActivityLog, _epmc_extras)
-WHO  = _DbDriver("WHO_",  PDF_DIR_WHO,  _who_search,  _who_dl,
-                 WhoRun, WhoPaper, WhoActivityLog, _epmc_extras)
+async def _atsdr_dl(p: dict, d: Path) -> dict:
+    return await _atsdr_download("doc", "noid", p["pdf_urls"], d)
+
+async def _zenodo_dl(p: dict, d: Path) -> dict:
+    return await _zenodo_download("doc", "noid", p["pdf_urls"], d)
+
+async def _canada_dl(p: dict, d: Path) -> dict:
+    return await _canada_download("doc", "noid", p["pdf_urls"], d)
+
+async def _concawe_dl(p: dict, d: Path) -> dict:
+    return await _concawe_download("doc", "noid", p["pdf_urls"], d)
+
+async def _safework_dl(p: dict, d: Path) -> dict:
+    return await _safework_download("doc", "noid", p["pdf_urls"], d)
+
+
+EPMC   = _DbDriver("RUN_",    PDF_DIR_EPMC,   _epmc_search,   _epmc_dl,
+                   Run, Paper, ActivityLog, _epmc_extras)
+PMC    = _DbDriver("PMC_",    PDF_DIR_PMC,    _pmc_search,    _pmc_dl,
+                   PmcRun, PmcPaper, PmcActivityLog, _epmc_extras)
+SS     = _DbDriver("SS_",     PDF_DIR_SS,     _ss_search,     _ss_dl,
+                   SsRun, SsPaper, SsActivityLog, _ss_extras)
+ECHA   = _DbDriver("ECHA_",   PDF_DIR_ECHA,   _echa_search,   _echa_dl,
+                   EchaRun, EchaPaper, EchaActivityLog, _epmc_extras)
+NTP    = _DbDriver("NTP_",    PDF_DIR_NTP,    _ntp_search,    _ntp_dl,
+                   NtpRun, NtpPaper, NtpActivityLog, _epmc_extras)
+WHO    = _DbDriver("WHO_",    PDF_DIR_WHO,    _who_search,    _who_dl,
+                   WhoRun, WhoPaper, WhoActivityLog, _epmc_extras)
+OEHHA  = _DbDriver("OEHHA_",  PDF_DIR_OEHHA,  _oehha_search,  _oehha_dl,
+                   OehhaRun, OehhaPaper, OehhaActivityLog, _epmc_extras)
+ATSDR  = _DbDriver("ATSDR_",  PDF_DIR_ATSDR,  _atsdr_search,  _atsdr_dl,
+                   AtsdrRun, AtsdrPaper, AtsdrActivityLog, _epmc_extras)
+ZENODO = _DbDriver("ZEN_",    PDF_DIR_ZENODO, _zenodo_search, _zenodo_dl,
+                   ZenodoRun, ZenodoPaper, ZenodoActivityLog, _epmc_extras)
+CANADA  = _DbDriver("CAN_",     PDF_DIR_CANADA,  _canada_search,  _canada_dl,
+                    CanadaRun, CanadaPaper, CanadaActivityLog, _epmc_extras)
+CONCAWE = _DbDriver("CONC_",   PDF_DIR_CONCAWE, _concawe_search, _concawe_dl,
+                    ConcaweRun, ConcawePaper, ConcaweActivityLog, _epmc_extras)
+SAFEWORK = _DbDriver("SWAU_", PDF_DIR_SAFEWORK, _safework_search, _safework_dl,
+                     SafeWorkRun, SafeWorkPaper, SafeWorkActivityLog, _epmc_extras)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -166,25 +222,33 @@ WHO  = _DbDriver("WHO_",  PDF_DIR_WHO,  _who_search,  _who_dl,
 # ══════════════════════════════════════════════════════════════════════════════
 def _build_candidates(papers: list[dict]) -> list[tuple[int, dict]]:
     """
-    Walk papers in relevance order, keep only those with pdf_urls,
-    deduplicate by DOI / PMID / normalised title.
+    Walk papers in relevance order, keep only those with pdf_urls.
+    Papers with multiple pdf_urls are expanded — one candidate per URL — so
+    every chapter/file gets a download slot (e.g. ATSDR BTEX has 8 chapters).
+    Deduplicates by pdf_url, DOI, and PMID.
     """
-    seen_doi:   set[str] = set()
-    seen_pmid:  set[str] = set()
-    seen_title: set[str] = set()
+    seen_doi:  set[str] = set()
+    seen_pmid: set[str] = set()
+    seen_url:  set[str] = set()
     out: list[tuple[int, dict]] = []
     for pos, p in enumerate(papers, 1):
-        if not p.get("pdf_urls"): continue
-        doi   = (p.get("doi")   or "").lower().strip()
-        pmid  = (p.get("pmid")  or "").strip()
-        title = " ".join((p.get("title") or "").lower().split())
-        if doi   and doi   in seen_doi:   continue
-        if pmid  and pmid  in seen_pmid:  continue
-        if title and title in seen_title: continue
-        out.append((pos, p))
-        if doi:   seen_doi.add(doi)
-        if pmid:  seen_pmid.add(pmid)
-        if title: seen_title.add(title)
+        urls = p.get("pdf_urls") or []
+        if not urls:
+            continue
+        doi  = (p.get("doi")  or "").lower().strip()
+        pmid = (p.get("pmid") or "").strip()
+        if doi  and doi  in seen_doi:  continue
+        if pmid and pmid in seen_pmid: continue
+        for url in urls:
+            if url in seen_url:
+                continue
+            seen_url.add(url)
+            # Create a shallow copy with exactly one pdf_url so the download
+            # function fetches this specific file, not the whole list.
+            entry = dict(p, pdf_urls=[url])
+            out.append((pos, entry))
+        if doi:  seen_doi.add(doi)
+        if pmid: seen_pmid.add(pmid)
     return out
 
 
@@ -193,9 +257,13 @@ async def _download_until_target(
     dl_func: Callable[[int, dict], Awaitable[dict]],
     target: int,
     batch_size: int = 5,
-) -> dict[int, dict]:
-    """Batched download in order; stop at first `target` successes."""
-    dl_map: dict[int, dict] = {}
+) -> dict[int, list[dict]]:
+    """
+    Batched download in order; stop after `target` total successes.
+    Returns {pos: [result, ...]} — a list per pos because one paper (pos)
+    may expand to multiple PDF files (e.g. ATSDR multi-chapter reports).
+    """
+    dl_map: dict[int, list[dict]] = {}
     successes = 0
     i = 0
     while successes < target and i < len(candidates):
@@ -203,7 +271,7 @@ async def _download_until_target(
         i += len(batch)
         results = await asyncio.gather(*[dl_func(pos, p) for pos, p in batch])
         for (pos, _), r in zip(batch, results):
-            dl_map[pos] = r
+            dl_map.setdefault(pos, []).append(r)
             if r.get("status") == "success":
                 successes += 1
                 if successes >= target: break
@@ -291,12 +359,22 @@ async def _run_pipeline(d: _DbDriver, req: RunRequest, db: AsyncSession) -> dict
         dl_map = await _download_until_target(candidates, _do_dl, req.max_pdfs)
 
         # 4) Persist results in original paper order
+        # dl_map[pos] is now a LIST of results (one per expanded PDF URL)
         for pos, p in enumerate(papers, 1):
             if not p.get("pdf_urls"):
-                result, _bucket = {"status": "no_url", "attempts": []}, "no_url"
                 no_url += 1
-            elif pos in dl_map:
-                result   = dl_map[pos]
+                papers_out.append(_paper_out(p, {"status": "no_url", "attempts": []}, pos))
+                continue
+
+            results_for_pos = dl_map.get(pos, [])
+            if not results_for_pos:
+                skip += 1
+                papers_out.append(_paper_out(p, {"status": "skipped"}, pos))
+                continue
+
+            # Each result in the list corresponds to one expanded PDF URL
+            first_out = True
+            for sub_idx, result in enumerate(results_for_pos):
                 attempts = result.get("attempts", [])
                 urls_tried += len(attempts)
                 urls_ok    += sum(1 for a in attempts if a["success"])
@@ -319,7 +397,7 @@ async def _run_pipeline(d: _DbDriver, req: RunRequest, db: AsyncSession) -> dict
                     db.add(d.Log(
                         run_id=run_id, chemical=chemical, log_type="url_attempt",
                         logged_at=att["attempted_at"],
-                        sort_order=pos * 1000 + att["attempt_no"],
+                        sort_order=pos * 1000 + sub_idx * 100 + att["attempt_no"],
                         pmcid=p.get("pmcid"), pmid=p.get("pmid"),
                         title=p.get("title"), result_position=pos,
                         url=att["url"], attempt_no=att["attempt_no"],
@@ -329,10 +407,14 @@ async def _run_pipeline(d: _DbDriver, req: RunRequest, db: AsyncSession) -> dict
                         file_size_kb=att["file_size_kb"], error=att["error"],
                         **d.extra_fields(p),
                     ))
-            else:
-                result = {"status": "skipped"}
-                skip += 1
-            papers_out.append(_paper_out(p, result, pos))
+                # Add one papers_out entry per downloaded file so the UI shows each PDF
+                if first_out:
+                    papers_out.append(_paper_out(p, result, pos))
+                    first_out = False
+                else:
+                    # Extra PDFs from the same page: show as separate rows in UI
+                    p_copy = dict(p, pdf_urls=[result.get("pdf_source") or ""])
+                    papers_out.append(_paper_out(p_copy, result, pos))
 
         # 5) Finalise run row
         finished = datetime.utcnow()
@@ -384,6 +466,30 @@ async def run_ntp(req: RunRequest, db: AsyncSession = Depends(get_db)):
 async def run_who(req: RunRequest, db: AsyncSession = Depends(get_db)):
     return await _run_pipeline(WHO, req, db)
 
+@app.post("/api/oehha/run")
+async def run_oehha(req: RunRequest, db: AsyncSession = Depends(get_db)):
+    return await _run_pipeline(OEHHA, req, db)
+
+@app.post("/api/atsdr/run")
+async def run_atsdr(req: RunRequest, db: AsyncSession = Depends(get_db)):
+    return await _run_pipeline(ATSDR, req, db)
+
+@app.post("/api/zenodo/run")
+async def run_zenodo(req: RunRequest, db: AsyncSession = Depends(get_db)):
+    return await _run_pipeline(ZENODO, req, db)
+
+@app.post("/api/canada/run")
+async def run_canada(req: RunRequest, db: AsyncSession = Depends(get_db)):
+    return await _run_pipeline(CANADA, req, db)
+
+@app.post("/api/concawe/run")
+async def run_concawe(req: RunRequest, db: AsyncSession = Depends(get_db)):
+    return await _run_pipeline(CONCAWE, req, db)
+
+@app.post("/api/safework/run")
+async def run_safework(req: RunRequest, db: AsyncSession = Depends(get_db)):
+    return await _run_pipeline(SAFEWORK, req, db)
+
 
 # ── runs listings (one shared dict shape) ─────────────────────────────────────
 @app.get("/api/runs")
@@ -409,6 +515,30 @@ async def list_runs_ntp(db: AsyncSession = Depends(get_db)):
 @app.get("/api/who/runs")
 async def list_runs_who(db: AsyncSession = Depends(get_db)):
     return await _list_runs(db, WhoRun)
+
+@app.get("/api/oehha/runs")
+async def list_runs_oehha(db: AsyncSession = Depends(get_db)):
+    return await _list_runs(db, OehhaRun)
+
+@app.get("/api/atsdr/runs")
+async def list_runs_atsdr(db: AsyncSession = Depends(get_db)):
+    return await _list_runs(db, AtsdrRun)
+
+@app.get("/api/zenodo/runs")
+async def list_runs_zenodo(db: AsyncSession = Depends(get_db)):
+    return await _list_runs(db, ZenodoRun)
+
+@app.get("/api/canada/runs")
+async def list_runs_canada(db: AsyncSession = Depends(get_db)):
+    return await _list_runs(db, CanadaRun)
+
+@app.get("/api/concawe/runs")
+async def list_runs_concawe(db: AsyncSession = Depends(get_db)):
+    return await _list_runs(db, ConcaweRun)
+
+@app.get("/api/safework/runs")
+async def list_runs_safework(db: AsyncSession = Depends(get_db)):
+    return await _list_runs(db, SafeWorkRun)
 
 
 async def _list_runs(db: AsyncSession, model) -> list[dict]:
