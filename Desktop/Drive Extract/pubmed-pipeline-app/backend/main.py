@@ -47,6 +47,7 @@ from db import (
     NiteActivityLog, NitePaper, NiteRun,
     OecdActivityLog, OecdPaper, OecdRun,
     PubMedActivityLog, PubMedPaper, PubMedRun,
+    NioshActivityLog, NioshPaper, NioshRun,
     get_db, init_db,
 )
 from europepmc       import search as _epmc_search,   download_pdf as _epmc_download
@@ -66,6 +67,7 @@ from EFSA            import search as _efsa_search, download_pdf as _efsa_downlo
 from NITE            import search as _nite_search, download_pdf as _nite_download
 from OECD            import search as _oecd_search, download_pdf as _oecd_download
 from PubMed          import search as _pubmed_search, download_pdf as _pubmed_download
+from NIOSH           import search as _niosh_search,  download_pdf as _niosh_download
 
 # ── paths ─────────────────────────────────────────────────────────────────────
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -87,13 +89,15 @@ PDF_DIR_EFSA     = PDF_DIR / "EFSA"
 PDF_DIR_NITE     = PDF_DIR / "NITE"
 PDF_DIR_OECD     = PDF_DIR / "OECD"
 PDF_DIR_PUBMED   = PDF_DIR / "PubMed"
+PDF_DIR_NIOSH    = PDF_DIR / "NIOSH"
 FRONTEND         = PROJECT_ROOT / "frontend"
 
 for d in (PDF_DIR_EPMC, PDF_DIR_PMC, PDF_DIR_SS,
           PDF_DIR_ECHA, PDF_DIR_NTP, PDF_DIR_WHO, PDF_DIR_OEHHA,
           PDF_DIR_ATSDR, PDF_DIR_ZENODO, PDF_DIR_CANADA, PDF_DIR_CONCAWE,
           PDF_DIR_SAFEWORK, PDF_DIR_OPENALEX,
-          PDF_DIR_EFSA, PDF_DIR_NITE, PDF_DIR_OECD, PDF_DIR_PUBMED):
+          PDF_DIR_EFSA, PDF_DIR_NITE, PDF_DIR_OECD, PDF_DIR_PUBMED,
+          PDF_DIR_NIOSH):
     d.mkdir(parents=True, exist_ok=True)
 
 
@@ -124,6 +128,7 @@ app.mount("/pdfs/EFSA",            StaticFiles(directory=str(PDF_DIR_EFSA)),    
 app.mount("/pdfs/NITE",            StaticFiles(directory=str(PDF_DIR_NITE)),     name="pdfs_nite")
 app.mount("/pdfs/OECD",            StaticFiles(directory=str(PDF_DIR_OECD)),     name="pdfs_oecd")
 app.mount("/pdfs/PubMed",          StaticFiles(directory=str(PDF_DIR_PUBMED)),   name="pdfs_pubmed")
+app.mount("/pdfs/NIOSH",           StaticFiles(directory=str(PDF_DIR_NIOSH)),    name="pdfs_niosh")
 if FRONTEND.exists():
     app.mount("/static", StaticFiles(directory=str(FRONTEND)), name="static")
 
@@ -229,6 +234,9 @@ async def _pubmed_dl(p: dict, d: Path) -> dict:
         pmid=p.get("pmid") or "noid",
         pdf_urls=p["pdf_urls"], pdf_dir=d)
 
+async def _niosh_dl(p: dict, d: Path) -> dict:
+    return await _niosh_download("doc", "noid", p["pdf_urls"], d)
+
 
 EPMC   = _DbDriver("RUN_",    PDF_DIR_EPMC,   _epmc_search,   _epmc_dl,
                    Run, Paper, ActivityLog, _epmc_extras)
@@ -262,8 +270,10 @@ NITE = _DbDriver("NITE_", PDF_DIR_NITE, _nite_search, _nite_dl,
                  NiteRun, NitePaper, NiteActivityLog, _epmc_extras)
 OECD = _DbDriver("OECD_", PDF_DIR_OECD, _oecd_search, _oecd_dl,
                  OecdRun, OecdPaper, OecdActivityLog, _epmc_extras)
-PUBMED = _DbDriver("PM_", PDF_DIR_PUBMED, _pubmed_search, _pubmed_dl,
+PUBMED = _DbDriver("PM_",    PDF_DIR_PUBMED, _pubmed_search, _pubmed_dl,
                    PubMedRun, PubMedPaper, PubMedActivityLog, _epmc_extras)
+NIOSH  = _DbDriver("NIOSH_", PDF_DIR_NIOSH,  _niosh_search,  _niosh_dl,
+                   NioshRun, NioshPaper, NioshActivityLog, _epmc_extras)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -561,6 +571,10 @@ async def run_oecd(req: RunRequest, db: AsyncSession = Depends(get_db)):
 async def run_pubmed(req: RunRequest, db: AsyncSession = Depends(get_db)):
     return await _run_pipeline(PUBMED, req, db)
 
+@app.post("/api/niosh/run")
+async def run_niosh(req: RunRequest, db: AsyncSession = Depends(get_db)):
+    return await _run_pipeline(NIOSH, req, db)
+
 
 # ── runs listings (one shared dict shape) ─────────────────────────────────────
 @app.get("/api/runs")
@@ -630,6 +644,10 @@ async def list_runs_oecd(db: AsyncSession = Depends(get_db)):
 @app.get("/api/pubmed/runs")
 async def list_runs_pubmed(db: AsyncSession = Depends(get_db)):
     return await _list_runs(db, PubMedRun)
+
+@app.get("/api/niosh/runs")
+async def list_runs_niosh(db: AsyncSession = Depends(get_db)):
+    return await _list_runs(db, NioshRun)
 
 
 async def _list_runs(db: AsyncSession, model) -> list[dict]:

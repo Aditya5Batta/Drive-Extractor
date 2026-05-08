@@ -512,6 +512,10 @@ PubMedRun         = _make_run_class  ("PubMedRun",         "pubmed_runs")
 PubMedPaper       = _make_paper_class("PubMedPaper",       "pubmed_papers",       "pubmed_runs")
 PubMedActivityLog = _make_log_class  ("PubMedActivityLog", "pubmed_activity_logs", "pubmed_runs")
 
+NioshRun         = _make_run_class  ("NioshRun",         "niosh_runs")
+NioshPaper       = _make_paper_class("NioshPaper",       "niosh_papers",       "niosh_runs")
+NioshActivityLog = _make_log_class  ("NioshActivityLog", "niosh_activity_logs", "niosh_runs")
+
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 async def get_db():
