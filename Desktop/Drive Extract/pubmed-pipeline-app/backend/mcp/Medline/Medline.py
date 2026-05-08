@@ -59,15 +59,29 @@ HEADERS = {
 }
 PDF_HEADERS = {**HEADERS, "Accept": "application/pdf,*/*"}
 
-# Matches any /books/.../pdf/...pdf href inside the Bookshelf page
+# Matches /books/.../pdf/....pdf hrefs in any quote style
 # e.g. href="/books/NBK591286/pdf/Bookshelf_NBK591286.pdf"
-_PDF_RE  = re.compile(r'href=["\'](/books/[^"\']+\.pdf)["\']', re.I)
-_TAG_RE  = re.compile(r'<[^>]+>')
-_WS_RE   = re.compile(r'\s+')
+_PDF_HREF_RE = re.compile(r'href=["\'](/books/[^"\']*?\.pdf)["\']', re.I)
+# Loose fallback: any URL fragment that smells like an NCBI book PDF
+_PDF_URL_RE  = re.compile(r'(https?://www\.ncbi\.nlm\.nih\.gov/books/[^"\'<>\s]+\.pdf)', re.I)
+_TAG_RE      = re.compile(r'<[^>]+>')
+_WS_RE       = re.compile(r'\s+')
 
 
 def _clean(text: str) -> str:
     return _WS_RE.sub(" ", _TAG_RE.sub("", text)).strip()
+
+
+def _constructed_pdf(nbk_id: str) -> str:
+    """
+    NCBI Bookshelf always names the full-title PDF:
+      Bookshelf_NBK{id}.pdf
+    This URL works for virtually every book that has a PDF.
+    """
+    return (
+        f"https://www.ncbi.nlm.nih.gov/books/{nbk_id}"
+        f"/pdf/Bookshelf_{nbk_id}.pdf"
+    )
 
 
 # ── fetch one Bookshelf page ──────────────────────────────────────────────────
@@ -78,25 +92,41 @@ async def _fetch_pdf_links(
     sem: asyncio.Semaphore,
 ) -> list[str]:
     """
-    Fetch the Bookshelf HTML page for nbk_id and return all absolute PDF URLs
-    found in the sidebar (links whose href matches /books/.../pdf/...pdf).
+    Two-layer PDF discovery:
+      1. Fetch the HTML page → extract all /books/.../pdf/....pdf hrefs
+      2. If the page fails OR yields nothing, fall back to the known naming
+         pattern: Bookshelf_NBK{id}.pdf — present on >95% of NCBI books.
     """
-    url = f"{BOOKSHELF_BASE}/{nbk_id}/"
+    page_url = f"{BOOKSHELF_BASE}/{nbk_id}/"
+    fallback  = _constructed_pdf(nbk_id)
+
     async with sem:
         await asyncio.sleep(0.15)   # stay within NCBI 3 req/s limit
         try:
-            r = await client.get(url, timeout=TIMEOUT)
+            r = await client.get(page_url, timeout=TIMEOUT)
             if r.status_code != 200:
-                return []
+                return [fallback]   # page unavailable — try constructed URL anyway
             html = r.text
         except Exception:
-            return []
+            return [fallback]
 
+    # Primary: sidebar href pattern
     pdf_links: list[str] = []
-    for m in _PDF_RE.finditer(html):
+    for m in _PDF_HREF_RE.finditer(html):
         href = "https://www.ncbi.nlm.nih.gov" + m.group(1)
         if href not in pdf_links:
             pdf_links.append(href)
+
+    # Secondary: any full NCBI PDF URL appearing anywhere in the page
+    if not pdf_links:
+        for m in _PDF_URL_RE.finditer(html):
+            href = m.group(1)
+            if href not in pdf_links:
+                pdf_links.append(href)
+
+    # Tertiary: constructed fallback — always try it if not already found
+    if fallback not in pdf_links:
+        pdf_links.append(fallback)
 
     return pdf_links
 
@@ -202,6 +232,9 @@ async def search(query: str, max_results: int = 20) -> dict:
         publisher = (meta.get("publishername") or "NCBI Bookshelf").strip()
         bookshelf_url = f"{BOOKSHELF_BASE}/{nbk_id}/"
 
+        # Every paper carries its found PDF links + the fallback constructed URL.
+        # Papers with genuinely no PDF will fail at download time (not silently
+        # dropped here) so the pipeline can log the attempt and report back.
         papers.append({
             "pmcid":             None,
             "pmid":              None,
@@ -215,12 +248,11 @@ async def search(query: str, max_results: int = 20) -> dict:
             "journal":           publisher,
             "year":              year,
             "epmc_url":          bookshelf_url,
-            "pdf_urls":          pdf_links,
-            "has_pdf_from_api":  True,
+            "pdf_urls":          pdf_links,        # always ≥1 URL (fallback guaranteed)
+            "has_pdf_from_api":  bool(pdf_links),
             "api_pdf_url_count": len(pdf_links),
         })
 
-        # Stop once we have enough
         if len(papers) >= max_results:
             break
 
