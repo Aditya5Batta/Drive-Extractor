@@ -55,6 +55,7 @@ from db import (
     MedlineActivityLog, MedlinePaper, MedlineRun,
     BiorxivActivityLog, BiorxivPaper, BiorxivRun,
     MedrxivActivityLog, MedrxivPaper, MedrxivRun,
+    HeroActivityLog, HeroPaper, HeroRun,
     get_db, init_db,
 )
 from europepmc       import search as _epmc_search,   download_pdf as _epmc_download
@@ -82,6 +83,7 @@ from ICSC            import search as _icsc_search,   download_pdf as _icsc_down
 from Medline         import search as _medline_search, download_pdf as _medline_download
 from Biorxiv         import search as _biorxiv_search, download_pdf as _biorxiv_download
 from Medrxiv         import search as _medrxiv_search, download_pdf as _medrxiv_download
+from HERO            import search as _hero_search,    download_pdf as _hero_download
 
 # ── paths ─────────────────────────────────────────────────────────────────────
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -111,6 +113,7 @@ PDF_DIR_ICSC     = PDF_DIR / "ICSC"
 PDF_DIR_MEDLINE  = PDF_DIR / "Medline"
 PDF_DIR_BIORXIV  = PDF_DIR / "Biorxiv"
 PDF_DIR_MEDRXIV  = PDF_DIR / "Medrxiv"
+PDF_DIR_HERO     = PDF_DIR / "HERO"
 FRONTEND         = PROJECT_ROOT / "frontend"
 
 for d in (PDF_DIR_EPMC, PDF_DIR_PMC, PDF_DIR_SS,
@@ -120,7 +123,8 @@ for d in (PDF_DIR_EPMC, PDF_DIR_PMC, PDF_DIR_SS,
           PDF_DIR_EFSA, PDF_DIR_NITE, PDF_DIR_OECD, PDF_DIR_PUBMED,
           PDF_DIR_NIOSH, PDF_DIR_ILO, PDF_DIR_IARC, PDF_DIR_CPDB,
           PDF_DIR_ICSC, PDF_DIR_MEDLINE,
-          PDF_DIR_BIORXIV, PDF_DIR_MEDRXIV):
+          PDF_DIR_BIORXIV, PDF_DIR_MEDRXIV,
+          PDF_DIR_HERO):
     d.mkdir(parents=True, exist_ok=True)
 
 
@@ -159,6 +163,7 @@ app.mount("/pdfs/ICSC",            StaticFiles(directory=str(PDF_DIR_ICSC)),    
 app.mount("/pdfs/Medline",         StaticFiles(directory=str(PDF_DIR_MEDLINE)),  name="pdfs_medline")
 app.mount("/pdfs/Biorxiv",         StaticFiles(directory=str(PDF_DIR_BIORXIV)),  name="pdfs_biorxiv")
 app.mount("/pdfs/Medrxiv",         StaticFiles(directory=str(PDF_DIR_MEDRXIV)),  name="pdfs_medrxiv")
+app.mount("/pdfs/HERO",            StaticFiles(directory=str(PDF_DIR_HERO)),     name="pdfs_hero")
 if FRONTEND.exists():
     app.mount("/static", StaticFiles(directory=str(FRONTEND)), name="static")
 
@@ -340,6 +345,12 @@ BIORXIV = _DbDriver("BRX_",  PDF_DIR_BIORXIV, _biorxiv_search, _biorxiv_dl,
                     BiorxivRun, BiorxivPaper, BiorxivActivityLog, _epmc_extras)
 MEDRXIV = _DbDriver("MRX_",  PDF_DIR_MEDRXIV, _medrxiv_search, _medrxiv_dl,
                     MedrxivRun, MedrxivPaper, MedrxivActivityLog, _epmc_extras)
+
+async def _hero_dl(p: dict, d: Path) -> dict:
+    return await _hero_download("doc", "noid", p["pdf_urls"], d)
+
+HERO = _DbDriver("HERO_", PDF_DIR_HERO, _hero_search, _hero_dl,
+                 HeroRun, HeroPaper, HeroActivityLog, _epmc_extras)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -668,6 +679,10 @@ async def run_biorxiv(req: RunRequest, db: AsyncSession = Depends(get_db)):
 @app.post("/api/medrxiv/run")
 async def run_medrxiv(req: RunRequest, db: AsyncSession = Depends(get_db)):
     return await _run_pipeline(MEDRXIV, req, db)
+
+@app.post("/api/hero/run")
+async def run_hero(req: RunRequest, db: AsyncSession = Depends(get_db)):
+    return await _run_pipeline(HERO, req, db)
 
 
 # ── runs listings (one shared dict shape) ─────────────────────────────────────
