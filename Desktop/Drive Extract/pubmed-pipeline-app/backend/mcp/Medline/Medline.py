@@ -2,28 +2,35 @@
 Medline / NCBI Bookshelf scraper.
 
 Source: https://www.ncbi.nlm.nih.gov/books/
-        NLM's full-text biomedical books and reports (ATSDR profiles,
-        NTP reports, IARC monographs, NLM publications…).
+
+WHY WE SCRAPE THE SEARCH PAGE (not eutils esearch)
+────────────────────────────────────────────────────
+NCBI eutils db=books returns ALL Bookshelf records — root books AND
+individual chapters AND tables AND figures. For a query like "benzene",
+fine-grained records with "benzene" literally in their title
+  ("Table 11. Results for benzene and 3-methoxybutyl acetate")
+rank ABOVE the root books the user actually wants
+  ("Addendum to the Toxicological Profile for Benzene" — NBK591286).
+
+The NCBI Bookshelf web search UI (ncbi.nlm.nih.gov/books?term=...) shows
+ROOT-LEVEL BOOKS in its results — exactly what a human searching sees.
+Scraping that page's NBK IDs is therefore more reliable than eutils.
 
 STRATEGY
 ────────
-1. esearch(db=books, term=query) → up to 200 UIDs
-   NCBI returns BOTH root books AND individual chapters as separate records.
-   Any [TITL] field qualifier is silently ignored for db=books.
+1. GET ncbi.nlm.nih.gov/books?term={query}  (server-side rendered HTML)
+   → extract unique /books/(NBK\d+)/ hrefs from the result area
+   → these are root books with real PDF downloads
 
-2. esummary batch → grab titles; client-side title-word filter:
-   • chapter titles ("Cancer in Humans", "Exposure Characterization") share
-     NO words with the chemical name → drop
-   • root book titles ("Toxicological Profile for Benzene") match → keep
-   • if title unknown → keep (constructed URL will 404 for real chapters)
+2. esummary batch for the found NBK UIDs → titles / authors / dates
+   (metadata only; we already have the NBK IDs from the HTML)
 
-3. For each kept UID, build TWO constructed PDF URL candidates — NO HTML
-   page fetching required; the URL pattern is consistent across Bookshelf:
-     https://www.ncbi.nlm.nih.gov/books/NBK{id}/pdf/Bookshelf_NBK{id}.pdf
-     https://www.ncbi.nlm.nih.gov/books/NBK{id}/pdf/NBK{id}.pdf
+3. Construct PDF URL candidates for each root book:
+   • Bookshelf_NBK{id}.pdf  (most common — ATSDR, NTP, NLM reports)
+   • NBK{id}.pdf             (older / smaller books)
 
-4. download_pdf tries each URL with GET; %PDF magic-byte check confirms a
-   real file.  Chapter UIDs naturally 404; root books return 200 + PDF. ✓
+4. download_pdf: GET → %PDF magic-byte check → save.
+   Any chapter NBK ID that slips in will 404 naturally.
 """
 from __future__ import annotations
 import asyncio, re, time
@@ -32,9 +39,8 @@ from pathlib import Path
 
 import httpx
 
-ESEARCH_URL  = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
-ESUMMARY_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi"
 BOOKSHELF    = "https://www.ncbi.nlm.nih.gov/books"
+ESUMMARY_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi"
 TIMEOUT      = 30.0
 
 HEADERS = {
@@ -50,6 +56,12 @@ HEADERS = {
 }
 PDF_HEADERS = {**HEADERS, "Accept": "application/pdf,*/*"}
 
+# /books/(NBK{id})/ links anywhere in a Bookshelf search results page
+_NBK_HREF_RE = re.compile(
+    r'href=["\'](?:https?://www\.ncbi\.nlm\.nih\.gov)?/books/(NBK\d+)/[^"\']*["\']',
+    re.I,
+)
+# Strip HTML tags / collapse whitespace
 _TAG_RE = re.compile(r'<[^>]+>')
 _WS_RE  = re.compile(r'\s+')
 
@@ -61,29 +73,13 @@ def _clean(text: str) -> str:
 
 
 def _pdf_candidates(nbk_id: str) -> list[str]:
-    """Ordered PDF URL candidates for a Bookshelf root-book."""
     return [
         f"{BOOKSHELF}/{nbk_id}/pdf/Bookshelf_{nbk_id}.pdf",
         f"{BOOKSHELF}/{nbk_id}/pdf/{nbk_id}.pdf",
     ]
 
 
-def _title_matches_query(title: str, query: str) -> bool:
-    """
-    True if ANY word ≥3 chars from `query` appears as a whole word in `title`.
-
-    query="Benzene":
-      "Toxicological Profile for Benzene"  → True   keep (root book)
-      "Cancer in Humans"                   → False  drop (chapter)
-      "Exposure Characterization"          → False  drop (chapter)
-    """
-    words = set(re.findall(r'[a-z]{3,}', query.lower()))
-    lo    = title.lower()
-    return any(bool(re.search(rf'\b{re.escape(w)}\b', lo)) for w in words)
-
-
 def _get_title(meta: object) -> str:
-    """Extract title from esummary record; try several field names."""
     if not isinstance(meta, dict):
         return ""
     for field in ("title", "booktitle", "chaptertitle", "bookname"):
@@ -93,25 +89,51 @@ def _get_title(meta: object) -> str:
     return ""
 
 
+def _title_matches_query(title: str, query: str) -> bool:
+    """True if ANY word ≥3 chars from query appears whole-word in title."""
+    words = set(re.findall(r'[a-z]{3,}', query.lower()))
+    lo    = title.lower()
+    return any(bool(re.search(rf'\b{re.escape(w)}\b', lo)) for w in words)
+
+
+# ── HTML search scraper ───────────────────────────────────────────────────────
+
+async def _html_search(client: httpx.AsyncClient, query: str, max_ids: int) -> list[str]:
+    """
+    Fetch the Bookshelf search-results HTML page and extract root-book NBK IDs.
+
+    The search UI returns BOOK-LEVEL cards (not chapters/tables).  We extract
+    unique /books/NBK{id}/ hrefs in document order; the first occurrences are
+    the result cards.  Navigation / sidebar links are few and deduplicated away.
+    """
+    try:
+        r = await client.get(BOOKSHELF, params={"term": query}, timeout=TIMEOUT)
+        if r.status_code != 200:
+            return []
+        html = r.text
+    except Exception:
+        return []
+
+    seen: set[str]   = set()
+    nbk_ids: list[str] = []
+    for m in _NBK_HREF_RE.finditer(html):
+        nbk = m.group(1)
+        if nbk not in seen:
+            seen.add(nbk)
+            nbk_ids.append(nbk)
+            if len(nbk_ids) >= max_ids:
+                break
+
+    return nbk_ids
+
+
 # ── public: search ────────────────────────────────────────────────────────────
 
 async def search(query: str, max_results: int = 20) -> dict:
-    """
-    Search NCBI Bookshelf.  Returns root-book records with constructed PDF URLs.
-    No HTML page fetching — the Bookshelf PDF URL pattern is consistent.
-    """
-    t0 = time.monotonic()
+    t0      = time.monotonic()
+    api_url = f"{BOOKSHELF}?term={query}"   # for logging
 
-    search_params = {
-        "db":         "books",
-        "term":       query,
-        "retmax":     min(max_results * 10, 200),
-        "retmode":    "json",
-        "usehistory": "n",
-    }
-    api_url = str(httpx.Request("GET", ESEARCH_URL, params=search_params).url)
-
-    def _empty(err=None):
+    def _empty(err: str | None = None) -> dict:
         return dict(
             query_sent=query, api_url=api_url,
             papers_returned=0, papers_with_pmcid=0,
@@ -120,66 +142,42 @@ async def search(query: str, max_results: int = 20) -> dict:
             error=err, papers=[],
         )
 
-    # ── Step 1: esearch ───────────────────────────────────────────────────────
-    try:
-        async with httpx.AsyncClient(
-            headers=HEADERS, follow_redirects=True, timeout=TIMEOUT
-        ) as c:
-            er = await c.get(ESEARCH_URL, params=search_params)
-            er.raise_for_status()
-            uid_list: list[str] = er.json().get("esearchresult", {}).get("idlist", [])
-    except Exception as exc:
-        return _empty(str(exc))
+    # ── Step 1: Bookshelf HTML search → root-book NBK IDs ────────────────────
+    async with httpx.AsyncClient(
+        headers=HEADERS, follow_redirects=True, timeout=TIMEOUT
+    ) as c:
+        nbk_ids = await _html_search(c, query, max_results * 3)
 
-    if not uid_list:
-        return _empty()
+    if not nbk_ids:
+        return _empty("Bookshelf HTML search returned no results")
 
-    # ── Step 2: esummary batch ────────────────────────────────────────────────
-    await asyncio.sleep(0.35)
+    # ── Step 2: esummary batch for metadata (optional; best-effort) ───────────
+    # The numeric part of the NBK ID IS the db=books UID for esummary.
+    uids    = [nbk[3:] for nbk in nbk_ids]   # "NBK591286" → "591286"
     summary: dict = {}
+    await asyncio.sleep(0.2)
     try:
         async with httpx.AsyncClient(
             headers=HEADERS, follow_redirects=True, timeout=TIMEOUT
         ) as c:
             sr = await c.get(ESUMMARY_URL, params={
-                "db":      "books",
-                "id":      ",".join(uid_list),
-                "retmode": "json",
+                "db": "books", "id": ",".join(uids), "retmode": "json",
             })
             sr.raise_for_status()
             summary = sr.json().get("result", {}) or {}
     except Exception:
         summary = {}
 
-    # ── Step 2b: client-side title-word filter ────────────────────────────────
-    # Drop chapters whose titles share no word with the query chemical name.
-    # If title is unknown, keep the UID — constructed PDF URL will 404 for
-    # real chapters and succeed for root books.
-    filtered: list[str] = []
-    for uid in uid_list:
-        meta  = summary.get(uid, {}) if isinstance(summary, dict) else {}
-        title = _get_title(meta)
-        if not title or _title_matches_query(title, query):
-            filtered.append(uid)
+    # ── Step 3: build paper records ───────────────────────────────────────────
+    seen_pdf: set[str]   = set()
+    papers:   list[dict] = []
 
-    if not filtered:
-        return _empty()
-
-    # ── Step 3: build paper records (NO HTML page fetching) ───────────────────
-    # PDF URLs are constructed from the NBK ID — no need to scrape pages.
-    # Chapters slip-through → both URLs return 404 in download_pdf (expected).
-    seen:   set[str]  = set()
-    papers: list[dict] = []
-
-    for uid in filtered:
-        nbk_id   = f"NBK{uid}"
+    for nbk_id, uid in zip(nbk_ids, uids):
         pdf_urls = _pdf_candidates(nbk_id)
-
-        # Deduplicate: same root book can appear as multiple chapter records
-        first = pdf_urls[0]
-        if first in seen:
+        first    = pdf_urls[0]
+        if first in seen_pdf:
             continue
-        seen.add(first)
+        seen_pdf.add(first)
 
         meta      = summary.get(uid, {}) if isinstance(summary, dict) else {}
         title     = _get_title(meta) or f"NCBI Bookshelf {nbk_id}"
@@ -212,6 +210,9 @@ async def search(query: str, max_results: int = 20) -> dict:
         if len(papers) >= max_results:
             break
 
+    if not papers:
+        return _empty()
+
     return dict(
         query_sent=query, api_url=api_url,
         papers_returned=len(papers), papers_with_pmcid=0,
@@ -227,10 +228,8 @@ async def download_pdf(
 ) -> dict:
     """
     Direct httpx download from NCBI Bookshelf.
-
-    Uses %PDF magic-byte check (more reliable than Content-Type alone —
-    some CDNs serve PDFs as application/octet-stream).
-    Chapter UIDs return 404; only root books with real PDFs succeed.
+    Uses %PDF magic-byte check (reliable even when Content-Type is wrong).
+    Chapters and missing IDs return 404 — only real root-book PDFs succeed.
     """
     pdf_dir.mkdir(parents=True, exist_ok=True)
 
@@ -255,7 +254,8 @@ async def download_pdf(
             try:
                 r  = await c.get(url)
                 ct = r.headers.get("content-type", "")
-                # Magic-byte check first — more reliable than Content-Type
+                # Magic-byte check is most reliable;
+                # CDNs sometimes serve PDFs as application/octet-stream
                 is_pdf = r.content[:4] == b"%PDF" or "pdf" in ct.lower()
 
                 attempt.update(
