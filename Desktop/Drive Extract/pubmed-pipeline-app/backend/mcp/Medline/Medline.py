@@ -6,44 +6,47 @@ Source: https://www.ncbi.nlm.nih.gov/books/
         Includes ATSDR toxicological profiles, NTP reports, IARC monographs,
         NLM publications — all with downloadable PDFs.
 
-THE CORE PROBLEM WITH db=books
-────────────────────────────────
-NCBI esearch with db=books returns BOTH root books AND individual chapters
-as separate records.  E.g. searching "Benzene" returns:
-  NBK591286  = root book  "Toxicological Profile for Benzene"        ← has PDF
-  NBK591289  = chapter    "Cancer in Humans"  (inside NBK591286)     ← NO PDF
-  NBK591291  = chapter    "Exposure Characterization"                 ← NO PDF
+WHY CHAPTERS ARE RETURNED
+──────────────────────────
+NCBI db=books esearch returns BOTH root books AND individual chapters as
+separate records.  Any field qualifier like [TITL] is silently ignored by
+the books database.  So a search for "Benzene" returns:
 
-Only root book pages have the PDF sidebar link. Chapter pages have no PDF.
+  NBK591286  root book  "Toxicological Profile for Benzene"        ← want this
+  NBK591289  chapter    "Cancer in Humans"  (inside NBK591286)     ← skip
+  NBK591291  chapter    "Exposure Characterization"                 ← skip
+  ...
 
-SOLUTION: Two-phase approach
-  1. Search using {query}[TITL] — searches title field only, so "Cancer in Humans"
-     (chapter title, no chemical name) is excluded; root books like
-     "Toxicological Profile for Benzene" are included.
-  2. For any chapter that slips through (its title does contain the chemical),
-     detect the parent book via the breadcrumb nav in the HTML, fetch the
-     parent page, and get the PDF from there.
+FIX: CLIENT-SIDE TITLE WORD FILTER
+────────────────────────────────────
+After esummary, check whether ANY word from the query appears in the
+record's title (case-insensitive whole-word match).
 
-Search
-──────
-GET eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi
-    ?db=books&term={query}[TITL]&retmax={n}&retmode=json
+  "Toxicological Profile for Benzene" → contains "benzene" → KEEP ✓
+  "Cancer in Humans"                  → no query word    → SKIP ✗
+  "Exposure Characterization"         → no query word    → SKIP ✗
+  "Table 1.1. Analytical methods…"    → no query word    → SKIP ✗
 
-Metadata
-────────
-GET esummary.fcgi?db=books&id={uid,...}&retmode=json
+For multi-word queries like "styrene butadiene", ANY matching word keeps
+the record, so relevant books aren't dropped.
 
-PDF detection (3 layers)
-────────────────────────
-  A. Parse HTML sidebar of the Bookshelf page: href="/books/NBK.../pdf/...pdf"
-  B. Any full NCBI PDF URL appearing anywhere in the page
-  C. If page has NO PDF links → chapter page detected → look for parent book
-     NBK ID in breadcrumb header → fetch parent page → repeat A/B there
-  D. Last resort: constructed URL  Bookshelf_NBK{id}.pdf
+PDF DETECTION (4 layers)
+─────────────────────────
+For each kept UID, fetch its Bookshelf HTML page:
+  A. PDF href links  href="/books/.../pdf/...pdf"
+  B. Full NCBI PDF URL anywhere in the page
+  C. <link rel="alternate" type="application/pdf"> tag
+  D. Constructed URL: Bookshelf_NBK{id}.pdf
+     + alternative without "Bookshelf_" prefix: {id}.pdf
 
-Download
+If the page has NO PDF links (= chapter that slipped through):
+  → Detect parent book from breadcrumb nav (first non-self NBK link)
+  → Fetch parent page → apply layers A–D there instead
+
+DOWNLOAD
 ────────
 Direct httpx GET — NCBI serves PDFs as plain HTTP, no browser needed.
+Detected by Content-Type header OR %PDF magic bytes.
 """
 from __future__ import annotations
 import asyncio, re, time
@@ -66,19 +69,25 @@ HEADERS = {
     "Accept":          "text/html,application/xhtml+xml,*/*;q=0.9",
     "Accept-Language": "en-US,en;q=0.9",
     "Accept-Encoding": "gzip, deflate, br",
-    "Cache-Control":   "no-cache",
+    "Referer":         "https://www.ncbi.nlm.nih.gov/books/",
 }
 PDF_HEADERS = {**HEADERS, "Accept": "application/pdf,*/*"}
 
-# PDF link in the sidebar e.g. href="/books/NBK591286/pdf/Bookshelf_NBK591286.pdf"
-_PDF_HREF_RE  = re.compile(r'href=["\'](/books/[^"\']*?\.pdf)["\']', re.I)
-# Full NCBI PDF URL anywhere in page
+# ── regexes ───────────────────────────────────────────────────────────────────
+# A: href PDF link e.g.  href="/books/NBK591286/pdf/Bookshelf_NBK591286.pdf"
+_PDF_HREF_RE  = re.compile(r'href\s*=\s*["\']\s*(/books/[^"\']+\.pdf)\s*["\']', re.I)
+# B: full NCBI PDF URL anywhere in page source
 _PDF_FULL_RE  = re.compile(
     r'(https?://www\.ncbi\.nlm\.nih\.gov/books/[^"\'<>\s]+\.pdf)', re.I
 )
-# Any NBK link in the page — used to find parent book from breadcrumb
-# e.g.  href="/books/NBK591286/"  or  href="/books/NBK591286"
-_NBK_LINK_RE  = re.compile(r'/books/(NBK\d+)(?:/|")', re.I)
+# C: <link rel="alternate" type="application/pdf" href="...">
+_PDF_LINK_TAG = re.compile(
+    r'<link[^>]+type=["\']application/pdf["\'][^>]+href=["\']([^"\']+)["\']'
+    r'|<link[^>]+href=["\']([^"\']+)["\'][^>]+type=["\']application/pdf["\']',
+    re.I,
+)
+# Parent book: any /books/NBK{id}/ link in page breadcrumb
+_NBK_LINK_RE  = re.compile(r'/books/(NBK\d+)/', re.I)
 
 _TAG_RE = re.compile(r'<[^>]+>')
 _WS_RE  = re.compile(r'\s+')
@@ -88,45 +97,76 @@ def _clean(text: str) -> str:
     return _WS_RE.sub(" ", _TAG_RE.sub("", text)).strip()
 
 
-def _constructed_pdf(nbk_id: str) -> str:
-    """Standard NCBI naming: Bookshelf_NBK{id}.pdf — works on root books."""
-    return (
-        f"https://www.ncbi.nlm.nih.gov/books/{nbk_id}"
-        f"/pdf/Bookshelf_{nbk_id}.pdf"
-    )
+def _pdf_candidates(nbk_id: str) -> list[str]:
+    """
+    Two constructed PDF URL patterns NCBI uses (try both):
+      1. Bookshelf_NBK{id}.pdf  — most common
+      2. NBK{id}.pdf            — used by some older/smaller books
+    """
+    return [
+        f"https://www.ncbi.nlm.nih.gov/books/{nbk_id}/pdf/Bookshelf_{nbk_id}.pdf",
+        f"https://www.ncbi.nlm.nih.gov/books/{nbk_id}/pdf/{nbk_id}.pdf",
+    ]
 
 
 def _extract_pdf_links(html: str) -> list[str]:
-    """Pull all distinct NCBI PDF URLs from a page's HTML."""
+    """Pull all distinct NCBI PDF URLs from a page's HTML (layers A + B + C)."""
     links: list[str] = []
-    # sidebar hrefs (/books/.../pdf/...pdf)
+
+    # Layer A: /books/.../pdf/...pdf hrefs
     for m in _PDF_HREF_RE.finditer(html):
         href = "https://www.ncbi.nlm.nih.gov" + m.group(1)
         if href not in links:
             links.append(href)
-    # full URLs anywhere in page
+
+    # Layer B: full NCBI PDF URL anywhere in source
     for m in _PDF_FULL_RE.finditer(html):
         href = m.group(1)
         if href not in links:
             links.append(href)
+
+    # Layer C: <link rel="alternate" type="application/pdf">
+    for m in _PDF_LINK_TAG.finditer(html):
+        href = m.group(1) or m.group(2) or ""
+        if href:
+            if href.startswith("/"):
+                href = "https://www.ncbi.nlm.nih.gov" + href
+            if href not in links:
+                links.append(href)
+
     return links
 
 
 def _find_parent_nbk(html: str, current_nbk: str) -> str | None:
     """
-    On a chapter page, the breadcrumb/header links to the parent root book.
-    Example breadcrumb:  Bookshelf › Toxicological Profile for Benzene › Cancer in Humans
-    The parent link /books/NBK591286/ appears in the first ~8000 chars of the page.
-
-    Find the first NBK ID in the top portion of the HTML that is NOT the
-    current page's own NBK ID.
+    Chapter pages have a breadcrumb like:
+      Bookshelf > Toxicological Profile for Benzene > Cancer in Humans
+    The parent book link /books/NBK{parent}/ appears in the first ~8000 chars.
+    Return the first NBK ID that is NOT the current page's own ID.
     """
-    header_html = html[:8000]  # breadcrumb is always near the top
-    for m in _NBK_LINK_RE.finditer(header_html):
+    for m in _NBK_LINK_RE.finditer(html[:8000]):
         candidate = m.group(1)
         if candidate != current_nbk:
             return candidate
     return None
+
+
+def _title_matches_query(title: str, query: str) -> bool:
+    """
+    Return True if ANY word from the query appears as a whole word in the title.
+    Case-insensitive.
+
+    Examples (query="Benzene"):
+      "Toxicological Profile for Benzene."  → True   (root book ✓)
+      "Cancer in Humans"                    → False  (chapter ✗)
+      "Table 1.1. Analytical methods…"      → False  (chapter ✗)
+    """
+    query_words = set(re.findall(r'[a-z]{3,}', query.lower()))  # words ≥3 chars
+    title_lower = title.lower()
+    return any(
+        bool(re.search(rf'\b{re.escape(w)}\b', title_lower))
+        for w in query_words
+    )
 
 
 # ── fetch PDF links for one Bookshelf page ────────────────────────────────────
@@ -137,79 +177,71 @@ async def _fetch_pdf_links(
     sem: asyncio.Semaphore,
 ) -> list[str]:
     """
-    Fetch nbk_id's page and return all PDF URLs found.
+    Fetch nbk_id's page and return all PDF URLs (HTML extraction + constructed).
 
-    If the page has no PDF links (= chapter, not root book):
-      → look in the breadcrumb for the parent root book's NBK ID
-      → fetch the parent page and get PDFs from there
-
-    Always appends a constructed fallback URL so the list is never empty.
+    If the page has no PDF links (chapter):
+      → find parent book from breadcrumb
+      → fetch parent page
+      → return parent's PDF links + parent's constructed candidates
     """
-    page_url = f"{BOOKSHELF_BASE}/{nbk_id}/"
-
     async with sem:
-        await asyncio.sleep(0.15)   # NCBI 3 req/s courtesy
+        await asyncio.sleep(0.15)
         try:
-            r = await client.get(page_url, timeout=TIMEOUT)
+            r = await client.get(f"{BOOKSHELF_BASE}/{nbk_id}/", timeout=TIMEOUT)
             html = r.text if r.status_code == 200 else ""
         except Exception:
             html = ""
 
-    # ── Layer A+B: direct PDF links on this page ──────────────────────────────
+    # Try to extract PDF links from this page
     pdf_links = _extract_pdf_links(html)
     if pdf_links:
-        # Root book: has PDF links. Keep them + add constructed as last fallback
-        if _constructed_pdf(nbk_id) not in pdf_links:
-            pdf_links.append(_constructed_pdf(nbk_id))
+        # Root book — real links found.  Append constructed fallbacks.
+        for c in _pdf_candidates(nbk_id):
+            if c not in pdf_links:
+                pdf_links.append(c)
         return pdf_links
 
-    # ── Layer C: no PDF links → this is a chapter page ───────────────────────
-    # Find parent root book NBK ID from breadcrumb
+    # No PDF links → likely a chapter.  Find the parent root book.
     parent_nbk = _find_parent_nbk(html, nbk_id) if html else None
 
     if parent_nbk:
-        # Fetch the parent (root) book page — this WILL have PDF links
         try:
             rp = await client.get(
                 f"{BOOKSHELF_BASE}/{parent_nbk}/", timeout=TIMEOUT
             )
             if rp.status_code == 200:
-                parent_pdfs = _extract_pdf_links(rp.text)
-                if parent_pdfs:
-                    # Add parent's constructed fallback too
-                    if _constructed_pdf(parent_nbk) not in parent_pdfs:
-                        parent_pdfs.append(_constructed_pdf(parent_nbk))
-                    return parent_pdfs
+                parent_links = _extract_pdf_links(rp.text)
+                if parent_links:
+                    for c in _pdf_candidates(parent_nbk):
+                        if c not in parent_links:
+                            parent_links.append(c)
+                    return parent_links
         except Exception:
             pass
-        # Parent page fetch failed — use constructed URL for parent
-        return [_constructed_pdf(parent_nbk)]
+        # Parent page fetch failed — use constructed URLs for parent
+        return _pdf_candidates(parent_nbk)
 
-    # ── Layer D: absolute last resort — constructed URL for current ID ─────────
-    return [_constructed_pdf(nbk_id)]
+    # No parent found — constructed fallback for current ID
+    return _pdf_candidates(nbk_id)
 
 
 # ── public search ─────────────────────────────────────────────────────────────
 
 async def search(query: str, max_results: int = 20) -> dict:
     """
-    Search NCBI Bookshelf for root books/reports whose TITLE mentions the query.
+    Search NCBI Bookshelf for books whose TITLE mentions the chemical.
 
-    Using [TITL] field qualifier means:
-      - "Toxicological Profile for Benzene"  → matched  (chemical in title)
-      - "Cancer in Humans" (chapter)         → NOT matched (no chemical in title)
-      - "Table 1.1. Analytical methods…"     → NOT matched
-
-    For any chapter that slips through (its title also contains the chemical),
-    _fetch_pdf_links() detects it has no PDF and climbs to the parent root book.
+    After esummary, applies a client-side title-word filter:
+    records whose title shares no word with the query (= chapters/sections)
+    are silently dropped.  Only genuine book entries proceed.
     """
     t0 = time.monotonic()
 
-    # [TITL] = title field only → returns books, not individual chapters
+    # Over-fetch because many results will be chapters that get filtered out
     search_params = {
         "db":         "books",
-        "term":       f"{query}[TITL]",
-        "retmax":     min(max_results * 3, 60),
+        "term":       query,
+        "retmax":     min(max_results * 10, 200),
         "retmode":    "json",
         "usehistory": "n",
     }
@@ -258,9 +290,28 @@ async def search(query: str, max_results: int = 20) -> dict:
     except Exception:
         summary_result = {}
 
-    # ── Step 3: fetch each page concurrently (Semaphore=3) ───────────────────
-    nbk_ids = [f"NBK{uid}" for uid in uid_list]
-    sem = asyncio.Semaphore(3)   # 3 concurrent, respects NCBI 3 req/s limit
+    # ── Step 2b: title-word filter — drop chapters before fetching pages ──────
+    # Chapters like "Cancer in Humans", "Methods", "Table 1.1…" share no words
+    # with the query chemical name → filtered here, saving unnecessary HTTP calls
+    filtered_uids: list[str] = []
+    for uid in uid_list:
+        meta  = summary_result.get(uid, {}) if isinstance(summary_result, dict) else {}
+        title = _clean(meta.get("title") or "")
+        if not title or _title_matches_query(title, query):
+            filtered_uids.append(uid)   # keep if title matches OR if title unknown
+
+    if not filtered_uids:
+        # All were chapters — nothing relevant found
+        return {
+            "query_sent": query, "api_url": api_url,
+            "papers_returned": 0, "papers_with_pmcid": 0,
+            "response_time_ms": int((time.monotonic() - t0) * 1000),
+            "status": "ok", "error": None, "papers": [],
+        }
+
+    # ── Step 3: fetch only title-filtered pages concurrently ──────────────────
+    nbk_ids = [f"NBK{uid}" for uid in filtered_uids]
+    sem = asyncio.Semaphore(3)
 
     async with httpx.AsyncClient(
         headers=HEADERS, follow_redirects=True, timeout=TIMEOUT
@@ -270,25 +321,24 @@ async def search(query: str, max_results: int = 20) -> dict:
             return_exceptions=True,
         )
 
-    # ── Step 4: build papers list ─────────────────────────────────────────────
-    seen_pdfs: set[str] = set()   # deduplicate by first PDF URL (same parent book)
+    # ── Step 4: build papers list with deduplication ──────────────────────────
+    seen_first_pdf: set[str] = set()
     papers: list[dict] = []
 
-    for uid, nbk_id, pdf_result in zip(uid_list, nbk_ids, pdf_results):
+    for uid, nbk_id, pdf_result in zip(filtered_uids, nbk_ids, pdf_results):
         pdf_links: list[str] = (
             pdf_result if isinstance(pdf_result, list) else []
         )
         if not pdf_links:
             continue
 
-        # Deduplicate: skip if we've already queued this exact PDF
+        # Deduplicate: skip if we already have this exact PDF queued
         first_pdf = pdf_links[0]
-        if first_pdf in seen_pdfs:
+        if first_pdf in seen_first_pdf:
             continue
-        seen_pdfs.add(first_pdf)
+        seen_first_pdf.add(first_pdf)
 
-        meta = summary_result.get(uid, {}) if isinstance(summary_result, dict) else {}
-
+        meta      = summary_result.get(uid, {}) if isinstance(summary_result, dict) else {}
         title     = _clean(meta.get("title") or f"NCBI Bookshelf {nbk_id}")
         raw_date  = meta.get("sortpubdate") or meta.get("pubdate") or ""
         year      = raw_date[:4] if raw_date else ""
@@ -306,7 +356,7 @@ async def search(query: str, max_results: int = 20) -> dict:
             "title":             title,
             "abstract":          (
                 f"NCBI Bookshelf. Publisher: {publisher}. "
-                f"Full text available at {book_url}"
+                f"Full text: {book_url}"
             )[:400],
             "authors":           authors,
             "journal":           publisher,
@@ -339,8 +389,8 @@ async def download_pdf(
 ) -> dict:
     """
     Direct httpx download of a Bookshelf PDF.
-    NCBI serves PDFs as plain HTTP responses — no browser needed.
-    Detected by content-type header OR %PDF magic bytes.
+    NCBI serves PDFs as plain HTTP — no browser needed.
+    Detected by Content-Type header OR %PDF magic bytes.
     """
     pdf_dir.mkdir(parents=True, exist_ok=True)
 
@@ -378,7 +428,6 @@ async def download_pdf(
                 attempt["is_pdf"]       = is_pdf
 
                 if r.status_code == 200 and is_pdf:
-                    # filename e.g. "Bookshelf_NBK591286.pdf"
                     fname = url.rstrip("/").split("/")[-1].split("?")[0]
                     if not fname.lower().endswith(".pdf"):
                         fname = f"medline_{i}.pdf"
