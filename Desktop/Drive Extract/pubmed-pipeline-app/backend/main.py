@@ -51,6 +51,7 @@ from db import (
     IloActivityLog, IloPaper, IloRun,
     IarcActivityLog, IarcPaper, IarcRun,
     CpdbActivityLog, CpdbPaper, CpdbRun,
+    IcscActivityLog, IcscPaper, IcscRun,
     get_db, init_db,
 )
 from europepmc       import search as _epmc_search,   download_pdf as _epmc_download
@@ -74,6 +75,7 @@ from NIOSH           import search as _niosh_search,  download_pdf as _niosh_dow
 from ILO             import search as _ilo_search,    download_pdf as _ilo_download
 from IARC            import search as _iarc_search,   download_pdf as _iarc_download
 from CPDB            import search as _cpdb_search,   download_pdf as _cpdb_download
+from ICSC            import search as _icsc_search,   download_pdf as _icsc_download
 
 # ── paths ─────────────────────────────────────────────────────────────────────
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -99,6 +101,7 @@ PDF_DIR_NIOSH    = PDF_DIR / "NIOSH"
 PDF_DIR_ILO      = PDF_DIR / "ILO"
 PDF_DIR_IARC     = PDF_DIR / "IARC"
 PDF_DIR_CPDB     = PDF_DIR / "CPDB"
+PDF_DIR_ICSC     = PDF_DIR / "ICSC"
 FRONTEND         = PROJECT_ROOT / "frontend"
 
 for d in (PDF_DIR_EPMC, PDF_DIR_PMC, PDF_DIR_SS,
@@ -106,7 +109,8 @@ for d in (PDF_DIR_EPMC, PDF_DIR_PMC, PDF_DIR_SS,
           PDF_DIR_ATSDR, PDF_DIR_ZENODO, PDF_DIR_CANADA, PDF_DIR_CONCAWE,
           PDF_DIR_SAFEWORK, PDF_DIR_OPENALEX,
           PDF_DIR_EFSA, PDF_DIR_NITE, PDF_DIR_OECD, PDF_DIR_PUBMED,
-          PDF_DIR_NIOSH, PDF_DIR_ILO, PDF_DIR_IARC, PDF_DIR_CPDB):
+          PDF_DIR_NIOSH, PDF_DIR_ILO, PDF_DIR_IARC, PDF_DIR_CPDB,
+          PDF_DIR_ICSC):
     d.mkdir(parents=True, exist_ok=True)
 
 
@@ -141,6 +145,7 @@ app.mount("/pdfs/NIOSH",           StaticFiles(directory=str(PDF_DIR_NIOSH)),   
 app.mount("/pdfs/ILO",             StaticFiles(directory=str(PDF_DIR_ILO)),      name="pdfs_ilo")
 app.mount("/pdfs/IARC",            StaticFiles(directory=str(PDF_DIR_IARC)),     name="pdfs_iarc")
 app.mount("/pdfs/CPDB",            StaticFiles(directory=str(PDF_DIR_CPDB)),     name="pdfs_cpdb")
+app.mount("/pdfs/ICSC",            StaticFiles(directory=str(PDF_DIR_ICSC)),     name="pdfs_icsc")
 if FRONTEND.exists():
     app.mount("/static", StaticFiles(directory=str(FRONTEND)), name="static")
 
@@ -258,6 +263,9 @@ async def _iarc_dl(p: dict, d: Path) -> dict:
 async def _cpdb_dl(p: dict, d: Path) -> dict:
     return await _cpdb_download("doc", "noid", p["pdf_urls"], d)
 
+async def _icsc_dl(p: dict, d: Path) -> dict:
+    return await _icsc_download("doc", "noid", p["pdf_urls"], d)
+
 
 EPMC   = _DbDriver("RUN_",    PDF_DIR_EPMC,   _epmc_search,   _epmc_dl,
                    Run, Paper, ActivityLog, _epmc_extras)
@@ -301,6 +309,8 @@ IARC   = _DbDriver("IARC_",  PDF_DIR_IARC,   _iarc_search,   _iarc_dl,
                    IarcRun, IarcPaper, IarcActivityLog, _epmc_extras)
 CPDB   = _DbDriver("CPDB_",  PDF_DIR_CPDB,   _cpdb_search,   _cpdb_dl,
                    CpdbRun, CpdbPaper, CpdbActivityLog, _epmc_extras)
+ICSC   = _DbDriver("ICSC_",  PDF_DIR_ICSC,   _icsc_search,   _icsc_dl,
+                   IcscRun, IcscPaper, IcscActivityLog, _epmc_extras)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -614,6 +624,10 @@ async def run_iarc(req: RunRequest, db: AsyncSession = Depends(get_db)):
 async def run_cpdb(req: RunRequest, db: AsyncSession = Depends(get_db)):
     return await _run_pipeline(CPDB, req, db)
 
+@app.post("/api/icsc/run")
+async def run_icsc(req: RunRequest, db: AsyncSession = Depends(get_db)):
+    return await _run_pipeline(ICSC, req, db)
+
 
 # ── runs listings (one shared dict shape) ─────────────────────────────────────
 @app.get("/api/runs")
@@ -699,6 +713,10 @@ async def list_runs_iarc(db: AsyncSession = Depends(get_db)):
 @app.get("/api/cpdb/runs")
 async def list_runs_cpdb(db: AsyncSession = Depends(get_db)):
     return await _list_runs(db, CpdbRun)
+
+@app.get("/api/icsc/runs")
+async def list_runs_icsc(db: AsyncSession = Depends(get_db)):
+    return await _list_runs(db, IcscRun)
 
 
 async def _list_runs(db: AsyncSession, model) -> list[dict]:

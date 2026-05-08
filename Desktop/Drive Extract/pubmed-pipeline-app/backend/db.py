@@ -528,6 +528,10 @@ CpdbRun         = _make_run_class  ("CpdbRun",         "cpdb_runs")
 CpdbPaper       = _make_paper_class("CpdbPaper",       "cpdb_papers",       "cpdb_runs")
 CpdbActivityLog = _make_log_class  ("CpdbActivityLog", "cpdb_activity_logs", "cpdb_runs")
 
+IcscRun         = _make_run_class  ("IcscRun",         "icsc_runs")
+IcscPaper       = _make_paper_class("IcscPaper",       "icsc_papers",       "icsc_runs")
+IcscActivityLog = _make_log_class  ("IcscActivityLog", "icsc_activity_logs", "icsc_runs")
+
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 async def get_db():
