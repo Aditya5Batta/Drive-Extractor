@@ -6,18 +6,20 @@ Source: https://hero.epa.gov/
 
 STRATEGY
 ────────
-1. HERO search JSON API → list of references with DOI / PubMed ID / metadata.
-   Fallback: scrape HTML search page if JSON returns 0 results.
+1. Scrape HERO HTML search page → parse reference containers to extract
+   reference ID, DOI, PubMed ID, title, authors, year per paper.
 
-2. For EACH reference, try three PDF strategies in order (stop at first success):
-
+2. For EACH reference, try PDF strategies in order (stop at first success):
    A. DOI   → Unpaywall API  (best for recent open-access journal articles)
    B. DOI/PMID → Semantic Scholar openAccessPdf  (ArXiv, repository copies)
    C. PMID  → Europe PMC     (PubMed Central — government-funded research)
+   D. Direct URL from HERO record (if present)
 
 3. Only include papers where a downloadable PDF URL was found.
 
 4. download_pdf: direct GET → %PDF magic-byte check → save.
+
+NOTE: verify=False is required on this machine due to SSL certificate chain issues.
 """
 from __future__ import annotations
 import asyncio, re, time
@@ -28,10 +30,8 @@ from urllib.parse import quote
 import httpx
 
 # ── endpoints ─────────────────────────────────────────────────────────────────
-HERO_SEARCH_API  = "https://hero.epa.gov/hero/ws/references/search.json"
-HERO_SEARCH_HTML = "https://hero.epa.gov/search/"
-HERO_DETAIL_API  = "https://hero.epa.gov/hero/ws/references/details.json"
-HERO_REF_URL     = "https://hero.epa.gov/reference"
+HERO_SEARCH_URL = "https://hero.epa.gov/search/"
+HERO_REF_URL    = "https://hero.epa.gov/reference"
 
 UNPAYWALL = "https://api.unpaywall.org/v2"
 UW_EMAIL  = "research.pipeline@example.com"
@@ -47,20 +47,97 @@ HEADERS = {
         "AppleWebKit/537.36 (KHTML, like Gecko) "
         "Chrome/132.0.0.0 Safari/537.36"
     ),
-    "Accept":          "application/json,text/html,*/*;q=0.9",
+    "Accept":          "text/html,application/json,*/*;q=0.9",
     "Accept-Language": "en-US,en;q=0.9",
     "Referer":         "https://hero.epa.gov/",
 }
 PDF_HEADERS = {**HEADERS, "Accept": "application/pdf,*/*"}
 
-# Matches "ID: 2598795" in HERO search HTML
-_ID_RE    = re.compile(r'\bID[:\s]+(\d{5,10})\b', re.I)
-_TAG_RE   = re.compile(r'<[^>]+>')
-_WS_RE    = re.compile(r'\s+')
+_TAG_RE = re.compile(r'<[^>]+>')
+_WS_RE  = re.compile(r'\s+')
 
 
 def _clean(text: str) -> str:
     return _WS_RE.sub(" ", _TAG_RE.sub("", str(text or ""))).strip()
+
+
+# ── parse reference containers from HERO search HTML ──────────────────────────
+
+def _parse_search_html(html: str, max_refs: int) -> list[dict]:
+    """
+    Parse HERO search result HTML.
+    Each reference card is a div with id="reference-container-XXXXX".
+    Extracts: ref_id, doi, pmid, title, authors, year.
+    """
+    refs: list[dict] = []
+
+    # Split on reference container boundaries
+    blocks = re.split(r'(?=<div id="reference-container-\d+)', html)
+
+    for block in blocks:
+        if len(refs) >= max_refs:
+            break
+
+        m = re.match(r'<div id="reference-container-(\d+)"', block)
+        if not m:
+            continue
+        ref_id = m.group(1)
+
+        # DOI link: href="https://doi.org/XXXX"
+        doi_m = re.search(r'https?://doi\.org/([^\s"\'<>&]+)', block)
+        doi = doi_m.group(1).strip().rstrip(").,;") if doi_m else ""
+
+        # PubMed link: href="https://pubmed.ncbi.nlm.nih.gov/XXXXX/"
+        pmid_m = re.search(r'pubmed\.ncbi\.nlm\.nih\.gov/(\d+)', block)
+        pmid = pmid_m.group(1) if pmid_m else ""
+
+        # Title: in a <p> with font-size: 1.2rem style
+        title_m = re.search(
+            r'style="font-size:\s*1\.2rem[^"]*"[^>]*>\s*([^<]{5,300})', block
+        )
+        title = _clean(title_m.group(1)) if title_m else f"HERO {ref_id}"
+
+        # Author + year: <i>Author et al. YYYY</i>
+        author_m = re.search(r'<i>([^<]{5,200})</i>', block)
+        author_str = _clean(author_m.group(1)) if author_m else ""
+
+        # Split author string into author list + year
+        authors: list[str] = []
+        year = ""
+        if author_str:
+            # Format is typically "Smith AB et al. 2005" or "Smith AB,  Jones C 2003"
+            year_m = re.search(r'\b(19|20)\d{2}\b', author_str)
+            if year_m:
+                year = year_m.group(0)
+                author_part = author_str[:year_m.start()].strip().rstrip(",. ")
+            else:
+                author_part = author_str
+            authors = [a.strip() for a in re.split(r"[,;]", author_part) if a.strip()]
+
+        # Abstract: in <p id="reference-XXXXX-abstract">
+        abstract_m = re.search(
+            rf'id="reference-{ref_id}-abstract"[^>]*>(.*?)</p>', block, re.S
+        )
+        abstract = ""
+        if abstract_m:
+            abstract = _clean(abstract_m.group(1))[:400]
+
+        # Publication type (Journal Article, Report, etc.)
+        type_m = re.search(r'wbkt-ellipsis-overflow[^>]*>\s*([A-Za-z][^<]{3,60}?)\s*</i>', block)
+        journal = _clean(type_m.group(1)) if type_m else "EPA HERO"
+
+        refs.append({
+            "ref_id":   ref_id,
+            "doi":      doi,
+            "pmid":     pmid,
+            "title":    title,
+            "authors":  authors,
+            "year":     year,
+            "journal":  journal,
+            "abstract": abstract,
+        })
+
+    return refs
 
 
 # ── PDF strategy A: Unpaywall ─────────────────────────────────────────────────
@@ -97,7 +174,7 @@ async def _semantic_scholar(
     sem: asyncio.Semaphore,
 ) -> str:
     paper_id = (
-        f"DOI:{doi}"  if doi
+        f"DOI:{doi}"   if doi
         else f"PMID:{pmid}" if pmid
         else ""
     )
@@ -140,7 +217,6 @@ async def _europe_pmc(
                 results = r.json().get("resultList", {}).get("result", [])
                 if results:
                     paper = results[0]
-                    # Check fullTextUrlList for a PDF
                     for entry in (
                         paper.get("fullTextUrlList", {}).get("fullTextUrl") or []
                     ):
@@ -148,7 +224,6 @@ async def _europe_pmc(
                             url = entry.get("url", "")
                             if url:
                                 return url
-                    # Fallback: PMC PDF URL if PMC ID is present
                     pmcid = paper.get("pmcid", "")
                     if pmcid:
                         return f"https://www.ncbi.nlm.nih.gov/pmc/articles/{pmcid}/pdf/"
@@ -157,27 +232,22 @@ async def _europe_pmc(
     return ""
 
 
-# ── resolve one reference to a paper dict ─────────────────────────────────────
+# ── resolve one parsed reference to a paper dict ──────────────────────────────
 
 async def _resolve_ref(
     ref: dict,
     client: httpx.AsyncClient,
     sem: asyncio.Semaphore,
 ) -> dict | None:
-    ref_id  = str(ref.get("referenceid") or ref.get("referenceId") or ref.get("id") or "")
-    doi     = _clean(ref.get("doi") or "").strip()
-    pmid    = str(ref.get("pubmedid") or ref.get("pubmedId") or "").strip()
-    title   = _clean(ref.get("title") or f"HERO {ref_id}")
-    year    = str(ref.get("year") or "")
-    journal = _clean(ref.get("source") or "EPA HERO")
-    abstract = _clean(ref.get("abstract") or "")[:400]
-    hero_url = f"{HERO_REF_URL}/{ref_id}/" if ref_id else ""
-
-    raw_auth = ref.get("authors") or ref.get("authorList") or ""
-    if isinstance(raw_auth, list):
-        authors = [_clean(a) for a in raw_auth if a]
-    else:
-        authors = [a.strip() for a in re.split(r"[;,]", str(raw_auth)) if a.strip()]
+    ref_id   = ref["ref_id"]
+    doi      = ref["doi"]
+    pmid     = ref["pmid"]
+    title    = ref["title"]
+    year     = ref["year"]
+    journal  = ref["journal"]
+    abstract = ref["abstract"]
+    authors  = ref["authors"]
+    hero_url = f"{HERO_REF_URL}/{ref_id}/"
 
     pdf_url = ""
 
@@ -192,12 +262,6 @@ async def _resolve_ref(
     # ── Strategy C: Europe PMC (PMID) ─────────────────────────────────────────
     if pmid and not pdf_url:
         pdf_url = await _europe_pmc(client, pmid, sem)
-
-    # ── Strategy D: direct URL from HERO record ───────────────────────────────
-    if not pdf_url:
-        direct = _clean(ref.get("url") or ref.get("pdfUrl") or "")
-        if direct.startswith("http"):
-            pdf_url = direct
 
     if not pdf_url:
         return None
@@ -218,112 +282,53 @@ async def _resolve_ref(
     }
 
 
-# ── fetch references via JSON API ─────────────────────────────────────────────
-
-async def _json_search(
-    client: httpx.AsyncClient, query: str, max_fetch: int
-) -> tuple[list[dict], str]:
-    """Returns (refs_list, api_url)."""
-    url = (
-        f"{HERO_SEARCH_API}?query={quote(query, safe='')}"
-        f"&max={max_fetch}&offset=0&sortby=score&order=desc"
-    )
-    try:
-        r = await client.get(url, timeout=TIMEOUT)
-        if r.status_code == 200:
-            data = r.json()
-            refs = (
-                data.get("references")
-                or data.get("data")
-                or data.get("results")
-                or data.get("searchResults")
-                or []
-            )
-            if isinstance(refs, list) and refs:
-                return refs, url
-    except Exception:
-        pass
-    return [], url
-
-
-# ── fetch reference IDs from HTML search page (fallback) ─────────────────────
-
-async def _html_search_ids(
-    client: httpx.AsyncClient, query: str, max_ids: int
-) -> list[str]:
-    try:
-        r = await client.get(
-            HERO_SEARCH_HTML,
-            params={"query": query, "query_box": query, "is_expanded": "false"},
-            timeout=TIMEOUT,
-        )
-        if r.status_code == 200:
-            ids = list(dict.fromkeys(_ID_RE.findall(r.text)))
-            return ids[:max_ids]
-    except Exception:
-        pass
-    return []
-
-
-async def _fetch_detail(
-    client: httpx.AsyncClient, ref_id: str, sem: asyncio.Semaphore
-) -> dict:
-    async with sem:
-        await asyncio.sleep(0.15)
-        try:
-            r = await client.get(
-                HERO_DETAIL_API,
-                params={"reference_id": ref_id},
-                timeout=TIMEOUT,
-            )
-            if r.status_code == 200:
-                d = r.json()
-                return d.get("data") or d.get("reference") or {}
-        except Exception:
-            pass
-    return {}
-
-
 # ── public: search ────────────────────────────────────────────────────────────
 
 async def search(query: str, max_results: int = 20) -> dict:
-    t0       = time.monotonic()
-    max_fetch = min(max_results * 4, 80)
+    t0        = time.monotonic()
+    max_fetch = min(max_results * 4, 100)
+    api_url   = f"{HERO_SEARCH_URL}?query={quote(query, safe='')}"
 
-    def _empty(err=None, url=""):
+    def _empty(err=None):
         return dict(
-            query_sent=query, api_url=url,
+            query_sent=query, api_url=api_url,
             papers_returned=0, papers_with_pmcid=0,
             response_time_ms=int((time.monotonic() - t0) * 1000),
             status="error" if err else "ok",
             error=err, papers=[],
         )
 
+    # verify=False: required because this machine has SSL certificate chain issues
     async with httpx.AsyncClient(
-        headers=HEADERS, follow_redirects=True, timeout=TIMEOUT
+        headers=HEADERS,
+        follow_redirects=True,
+        timeout=TIMEOUT,
+        verify=False,
     ) as client:
 
-        # ── Step 1: get references ────────────────────────────────────────────
-        refs, api_url = await _json_search(client, query, max_fetch)
+        # ── Step 1: scrape HERO search HTML ──────────────────────────────────
+        try:
+            r = await client.get(
+                HERO_SEARCH_URL,
+                params={
+                    "query":       query,
+                    "query_box":   query,
+                    "is_expanded": "false",
+                },
+            )
+            if r.status_code != 200:
+                return _empty(err=f"HERO search returned HTTP {r.status_code}")
+            html = r.text
+        except Exception as exc:
+            return _empty(err=str(exc))
 
-        # Fall back to HTML scraping if JSON API returns nothing
+        refs = _parse_search_html(html, max_fetch)
         if not refs:
-            detail_sem = asyncio.Semaphore(3)
-            ids = await _html_search_ids(client, query, max_fetch)
-            if not ids:
-                return _empty(url=api_url)
-            api_url = f"{HERO_SEARCH_HTML}?query={quote(query, safe='')}"
-            # Fetch details for each ID
-            detail_tasks = [_fetch_detail(client, rid, detail_sem) for rid in ids]
-            details = await asyncio.gather(*detail_tasks)
-            refs = [d for d in details if d]
+            return _empty()
 
-        if not refs:
-            return _empty(url=api_url)
-
-        # ── Step 2: resolve PDF URLs (3 strategies) concurrently ─────────────
-        sem = asyncio.Semaphore(3)
-        tasks = [_resolve_ref(ref, client, sem) for ref in refs[:max_fetch]]
+        # ── Step 2: resolve PDF URLs concurrently ─────────────────────────────
+        sem   = asyncio.Semaphore(3)
+        tasks = [_resolve_ref(ref, client, sem) for ref in refs]
         results = await asyncio.gather(*tasks)
 
     papers: list[dict] = [p for p in results if p is not None][:max_results]
@@ -348,8 +353,12 @@ async def download_pdf(
 
     attempts: list[dict] = []
 
+    # verify=False: required due to SSL certificate chain issues on this machine
     async with httpx.AsyncClient(
-        headers=PDF_HEADERS, follow_redirects=True, timeout=TIMEOUT
+        headers=PDF_HEADERS,
+        follow_redirects=True,
+        timeout=TIMEOUT,
+        verify=False,
     ) as c:
         for i, url in enumerate(pdf_urls, 1):
             await asyncio.sleep(0.3)
