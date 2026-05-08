@@ -370,7 +370,8 @@ async def _run_pipeline(d: _DbDriver, req: RunRequest, db: AsyncSession) -> dict
             run.finished_at = datetime.utcnow()
             run.duration_s  = (run.finished_at - started).total_seconds()
             await db.commit()
-            return _build_response(run_id, chemical, run, [], 0, 0, 0)
+            return _build_response(run_id, chemical, run, [], 0, 0, 0,
+                                   max_results=req.max_pdfs)
 
         # 2) Log every paper found, in relevance order
         t0 = time.monotonic()
@@ -485,7 +486,8 @@ async def _run_pipeline(d: _DbDriver, req: RunRequest, db: AsyncSession) -> dict
         run.error  = str(e)
 
     await db.commit()
-    return _build_response(run_id, chemical, run, papers_out, ok, fail, skip, no_url)
+    return _build_response(run_id, chemical, run, papers_out, ok, fail, skip, no_url,
+                           max_results=req.max_pdfs)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -687,12 +689,16 @@ async def health(db: AsyncSession = Depends(get_db)):
 # ══════════════════════════════════════════════════════════════════════════════
 # Dict shapers (one per row type — used by all 3 DBs)
 # ══════════════════════════════════════════════════════════════════════════════
-def _build_response(run_id, chemical, run, papers_out, ok, fail, skip, no_url=0):
-    # Return papers in their original search-result order (result_position
-    # ascending). Failed/no_url papers are kept so the UI shows the website's
-    # exact ranking — frontend handles missing PDFs gracefully (still renders
-    # title/View/DOI links, just without a download button).
+def _build_response(run_id, chemical, run, papers_out, ok, fail, skip, no_url=0,
+                    max_results: int | None = None):
+    # Return papers in original search-result order (result_position ascending).
+    # Failed/no_url papers are kept so the UI shows the source's exact ranking;
+    # the frontend renders missing PDFs gracefully (title + View/DOI links).
+    # Cap to max_results so the response matches what the user requested,
+    # not the over-fetched candidate pool.
     ordered = sorted(papers_out, key=lambda p: p.get("result_position", 0))
+    if max_results:
+        ordered = ordered[:max_results]
     return {
         "run_id":   run_id,
         "chemical": chemical,
