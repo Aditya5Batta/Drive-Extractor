@@ -532,6 +532,10 @@ IcscRun         = _make_run_class  ("IcscRun",         "icsc_runs")
 IcscPaper       = _make_paper_class("IcscPaper",       "icsc_papers",       "icsc_runs")
 IcscActivityLog = _make_log_class  ("IcscActivityLog", "icsc_activity_logs", "icsc_runs")
 
+MedlineRun         = _make_run_class  ("MedlineRun",         "medline_runs")
+MedlinePaper       = _make_paper_class("MedlinePaper",       "medline_papers",       "medline_runs")
+MedlineActivityLog = _make_log_class  ("MedlineActivityLog", "medline_activity_logs", "medline_runs")
+
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 async def get_db():
