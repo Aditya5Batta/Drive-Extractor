@@ -143,14 +143,14 @@ const DBS = [
   { id: "medline",  label: "Medline",      runUrl: "/api/medline/run",  pdfDir: "/pdfs/Medline",     color: "#e11d48" },
 ];
 
-// Track which DBs are selected (all on by default)
-const selected = new Set(DBS.map(d => d.id));
+// Track which DBs are selected (none on by default — user picks)
+const selected = new Set();
 
 document.addEventListener("DOMContentLoaded", () => {
   // Build DB checkboxes
   const sel = document.getElementById("db-selector");
   sel.innerHTML = DBS.map(d => `
-    <div class="db-check active" id="chk-${d.id}" style="color:${d.color}" onclick="toggleDb('${d.id}')">
+    <div class="db-check" id="chk-${d.id}" style="color:${d.color}" onclick="toggleDb('${d.id}')">
       <span class="dot"></span>
       <span class="lbl">${d.label}</span>
     </div>`).join("");
@@ -158,7 +158,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Build panels
   const panels = document.getElementById("panels");
   panels.innerHTML = DBS.map(d => `
-    <div class="panel" id="panel-${d.id}">
+    <div class="panel hidden" id="panel-${d.id}">
       <div class="panel-header">
         <span class="db-name ${d.id}">${d.label}</span>
         <label>PDFs
