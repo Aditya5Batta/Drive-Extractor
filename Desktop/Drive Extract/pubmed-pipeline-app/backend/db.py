@@ -516,6 +516,10 @@ NioshRun         = _make_run_class  ("NioshRun",         "niosh_runs")
 NioshPaper       = _make_paper_class("NioshPaper",       "niosh_papers",       "niosh_runs")
 NioshActivityLog = _make_log_class  ("NioshActivityLog", "niosh_activity_logs", "niosh_runs")
 
+IloRun         = _make_run_class  ("IloRun",         "ilo_runs")
+IloPaper       = _make_paper_class("IloPaper",       "ilo_papers",       "ilo_runs")
+IloActivityLog = _make_log_class  ("IloActivityLog", "ilo_activity_logs", "ilo_runs")
+
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 async def get_db():
