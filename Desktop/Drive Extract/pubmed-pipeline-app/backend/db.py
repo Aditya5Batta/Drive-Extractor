@@ -524,6 +524,10 @@ IarcRun         = _make_run_class  ("IarcRun",         "iarc_runs")
 IarcPaper       = _make_paper_class("IarcPaper",       "iarc_papers",       "iarc_runs")
 IarcActivityLog = _make_log_class  ("IarcActivityLog", "iarc_activity_logs", "iarc_runs")
 
+CpdbRun         = _make_run_class  ("CpdbRun",         "cpdb_runs")
+CpdbPaper       = _make_paper_class("CpdbPaper",       "cpdb_papers",       "cpdb_runs")
+CpdbActivityLog = _make_log_class  ("CpdbActivityLog", "cpdb_activity_logs", "cpdb_runs")
+
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 async def get_db():
