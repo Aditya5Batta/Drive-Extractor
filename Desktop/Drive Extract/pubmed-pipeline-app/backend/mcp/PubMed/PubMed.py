@@ -67,6 +67,58 @@ def _try_solve_pow(html: str) -> tuple[str, str, int] | None:
     nonce      = _solve_pow(challenge, difficulty)
     return cookie, f"{challenge},{nonce}", nonce
 
+
+# ── Shared PoW cookie cache ───────────────────────────────────────────────────
+# PMC's PoW cookie is valid for ~5 minutes (POW_COOKIE_EXPIRATION = 0.208333d
+# in the JS init call ≈ 5 hours actually — it's days). We cache the solved
+# (name, value) at module level so parallel downloads in the same pipeline run
+# share ONE PoW solve instead of each hammering NCBI with their own challenge
+# fetch + retry. Concurrent solves are serialised by the lock.
+_POW_COOKIE: tuple[str, str] | None = None
+_POW_LOCK   = asyncio.Lock()
+
+
+async def _ensure_pow_cookie(client: httpx.AsyncClient, sample_url: str) -> bool:
+    """
+    Make sure the client's cookie jar has a working PMC PoW cookie. Reuses
+    the module-level cache when available; otherwise fetches the interstitial,
+    solves the puzzle once, and caches the result.
+    Returns True if a cookie is set, False if we couldn't get one.
+    """
+    global _POW_COOKIE
+    # Fast path — cached cookie
+    if _POW_COOKIE:
+        name, value = _POW_COOKIE
+        client.cookies.set(name, value, domain="pmc.ncbi.nlm.nih.gov", path="/")
+        return True
+
+    async with _POW_LOCK:
+        # Re-check inside lock (another coroutine may have solved while we waited)
+        if _POW_COOKIE:
+            name, value = _POW_COOKIE
+            client.cookies.set(name, value, domain="pmc.ncbi.nlm.nih.gov", path="/")
+            return True
+
+        # Fetch the interstitial and solve
+        try:
+            r = await client.get(sample_url)
+        except Exception:
+            return False
+        pow_result = _try_solve_pow(r.text)
+        if not pow_result:
+            return False
+        name, value, _nonce = pow_result
+        _POW_COOKIE = (name, value)
+        client.cookies.set(name, value, domain="pmc.ncbi.nlm.nih.gov", path="/")
+        return True
+
+
+def _invalidate_pow_cookie():
+    """Drop the cached cookie — call when a request returns the PoW HTML
+    again (cookie expired). Next caller will re-solve."""
+    global _POW_COOKIE
+    _POW_COOKIE = None
+
 PUBMED_WEB   = "https://pubmed.ncbi.nlm.nih.gov/"
 ESEARCH_URL  = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
 ESUMMARY_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi"
@@ -306,8 +358,12 @@ async def download_pdf(pmcid: str, pmid: str, pdf_urls: list[str],
         timeout=TIMEOUT, follow_redirects=True, headers=PDF_HEADERS,
         verify=False,  # NCBI cert revocation flakiness on Windows
     ) as c:
+        # Pre-load the cached PoW cookie (or solve once if not cached) so we
+        # skip the first-fetch interstitial round-trip for every download.
+        await _ensure_pow_cookie(c, pdf_urls[0])
+
         for i, url in enumerate(pdf_urls, 1):
-            await asyncio.sleep(0.4)
+            await asyncio.sleep(0.2)
             attempt = {
                 "url": url, "attempt_no": i,
                 "http_status": None, "content_type": None,
@@ -320,19 +376,20 @@ async def download_pdf(pmcid: str, pmid: str, pdf_urls: list[str],
                 ct = r.headers.get("content-type", "")
                 is_pdf = "pdf" in ct.lower() or r.content[:4] == b"%PDF"
 
-                # PMC's bot challenge: small HTML interstitial with PoW JS.
-                # Solve the puzzle, set the cookie, retry once on the same client.
+                # If we got the PoW page back, the cached cookie expired.
+                # Invalidate, re-solve, retry once.
                 if (not is_pdf and r.status_code == 200
                         and "html" in ct.lower()
                         and "pmc.ncbi.nlm.nih.gov" in str(r.url)):
                     pow_result = _try_solve_pow(r.text)
                     if pow_result:
-                        cookie_name, cookie_value, _nonce = pow_result
-                        # Set on the parent domain so it applies to /articles/.../pdf/
-                        c.cookies.set(
-                            cookie_name, cookie_value,
-                            domain="pmc.ncbi.nlm.nih.gov", path="/",
-                        )
+                        name, value, _nonce = pow_result
+                        # Update both the local client AND the module cache so
+                        # other concurrent downloads pick up the new value.
+                        global _POW_COOKIE
+                        _POW_COOKIE = (name, value)
+                        c.cookies.set(name, value,
+                                      domain="pmc.ncbi.nlm.nih.gov", path="/")
                         r  = await c.get(url)
                         ct = r.headers.get("content-type", "")
                         is_pdf = "pdf" in ct.lower() or r.content[:4] == b"%PDF"
