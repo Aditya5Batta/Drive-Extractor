@@ -53,6 +53,8 @@ from db import (
     CpdbActivityLog, CpdbPaper, CpdbRun,
     IcscActivityLog, IcscPaper, IcscRun,
     MedlineActivityLog, MedlinePaper, MedlineRun,
+    BiorxivActivityLog, BiorxivPaper, BiorxivRun,
+    MedrxivActivityLog, MedrxivPaper, MedrxivRun,
     get_db, init_db,
 )
 from europepmc       import search as _epmc_search,   download_pdf as _epmc_download
@@ -78,6 +80,8 @@ from IARC            import search as _iarc_search,   download_pdf as _iarc_down
 from CPDB            import search as _cpdb_search,   download_pdf as _cpdb_download
 from ICSC            import search as _icsc_search,   download_pdf as _icsc_download
 from Medline         import search as _medline_search, download_pdf as _medline_download
+from Biorxiv         import search as _biorxiv_search, download_pdf as _biorxiv_download
+from Medrxiv         import search as _medrxiv_search, download_pdf as _medrxiv_download
 
 # ── paths ─────────────────────────────────────────────────────────────────────
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -105,6 +109,8 @@ PDF_DIR_IARC     = PDF_DIR / "IARC"
 PDF_DIR_CPDB     = PDF_DIR / "CPDB"
 PDF_DIR_ICSC     = PDF_DIR / "ICSC"
 PDF_DIR_MEDLINE  = PDF_DIR / "Medline"
+PDF_DIR_BIORXIV  = PDF_DIR / "Biorxiv"
+PDF_DIR_MEDRXIV  = PDF_DIR / "Medrxiv"
 FRONTEND         = PROJECT_ROOT / "frontend"
 
 for d in (PDF_DIR_EPMC, PDF_DIR_PMC, PDF_DIR_SS,
@@ -113,7 +119,8 @@ for d in (PDF_DIR_EPMC, PDF_DIR_PMC, PDF_DIR_SS,
           PDF_DIR_SAFEWORK, PDF_DIR_OPENALEX,
           PDF_DIR_EFSA, PDF_DIR_NITE, PDF_DIR_OECD, PDF_DIR_PUBMED,
           PDF_DIR_NIOSH, PDF_DIR_ILO, PDF_DIR_IARC, PDF_DIR_CPDB,
-          PDF_DIR_ICSC, PDF_DIR_MEDLINE):
+          PDF_DIR_ICSC, PDF_DIR_MEDLINE,
+          PDF_DIR_BIORXIV, PDF_DIR_MEDRXIV):
     d.mkdir(parents=True, exist_ok=True)
 
 
@@ -150,6 +157,8 @@ app.mount("/pdfs/IARC",            StaticFiles(directory=str(PDF_DIR_IARC)),    
 app.mount("/pdfs/CPDB",            StaticFiles(directory=str(PDF_DIR_CPDB)),     name="pdfs_cpdb")
 app.mount("/pdfs/ICSC",            StaticFiles(directory=str(PDF_DIR_ICSC)),     name="pdfs_icsc")
 app.mount("/pdfs/Medline",         StaticFiles(directory=str(PDF_DIR_MEDLINE)),  name="pdfs_medline")
+app.mount("/pdfs/Biorxiv",         StaticFiles(directory=str(PDF_DIR_BIORXIV)),  name="pdfs_biorxiv")
+app.mount("/pdfs/Medrxiv",         StaticFiles(directory=str(PDF_DIR_MEDRXIV)),  name="pdfs_medrxiv")
 if FRONTEND.exists():
     app.mount("/static", StaticFiles(directory=str(FRONTEND)), name="static")
 
@@ -320,6 +329,17 @@ ICSC   = _DbDriver("ICSC_",  PDF_DIR_ICSC,   _icsc_search,   _icsc_dl,
                    IcscRun, IcscPaper, IcscActivityLog, _epmc_extras)
 MEDLINE = _DbDriver("MDL_",  PDF_DIR_MEDLINE, _medline_search, _medline_dl,
                     MedlineRun, MedlinePaper, MedlineActivityLog, _epmc_extras)
+
+async def _biorxiv_dl(p: dict, d: Path) -> dict:
+    return await _biorxiv_download("doc", "noid", p["pdf_urls"], d)
+
+async def _medrxiv_dl(p: dict, d: Path) -> dict:
+    return await _medrxiv_download("doc", "noid", p["pdf_urls"], d)
+
+BIORXIV = _DbDriver("BRX_",  PDF_DIR_BIORXIV, _biorxiv_search, _biorxiv_dl,
+                    BiorxivRun, BiorxivPaper, BiorxivActivityLog, _epmc_extras)
+MEDRXIV = _DbDriver("MRX_",  PDF_DIR_MEDRXIV, _medrxiv_search, _medrxiv_dl,
+                    MedrxivRun, MedrxivPaper, MedrxivActivityLog, _epmc_extras)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -640,6 +660,14 @@ async def run_icsc(req: RunRequest, db: AsyncSession = Depends(get_db)):
 @app.post("/api/medline/run")
 async def run_medline(req: RunRequest, db: AsyncSession = Depends(get_db)):
     return await _run_pipeline(MEDLINE, req, db)
+
+@app.post("/api/biorxiv/run")
+async def run_biorxiv(req: RunRequest, db: AsyncSession = Depends(get_db)):
+    return await _run_pipeline(BIORXIV, req, db)
+
+@app.post("/api/medrxiv/run")
+async def run_medrxiv(req: RunRequest, db: AsyncSession = Depends(get_db)):
+    return await _run_pipeline(MEDRXIV, req, db)
 
 
 # ── runs listings (one shared dict shape) ─────────────────────────────────────

@@ -536,6 +536,14 @@ MedlineRun         = _make_run_class  ("MedlineRun",         "medline_runs")
 MedlinePaper       = _make_paper_class("MedlinePaper",       "medline_papers",       "medline_runs")
 MedlineActivityLog = _make_log_class  ("MedlineActivityLog", "medline_activity_logs", "medline_runs")
 
+BiorxivRun         = _make_run_class  ("BiorxivRun",         "biorxiv_runs")
+BiorxivPaper       = _make_paper_class("BiorxivPaper",       "biorxiv_papers",       "biorxiv_runs")
+BiorxivActivityLog = _make_log_class  ("BiorxivActivityLog", "biorxiv_activity_logs", "biorxiv_runs")
+
+MedrxivRun         = _make_run_class  ("MedrxivRun",         "medrxiv_runs")
+MedrxivPaper       = _make_paper_class("MedrxivPaper",       "medrxiv_papers",       "medrxiv_runs")
+MedrxivActivityLog = _make_log_class  ("MedrxivActivityLog", "medrxiv_activity_logs", "medrxiv_runs")
+
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 async def get_db():

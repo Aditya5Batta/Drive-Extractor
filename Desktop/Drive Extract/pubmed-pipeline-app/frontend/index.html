@@ -62,6 +62,8 @@
     .panel-header .db-name.oecd     { color: #84cc16; }
     .panel-header .db-name.pubmed   { color: #2563eb; }
     .panel-header .db-name.medline  { color: #e11d48; }
+    .panel-header .db-name.biorxiv  { color: #b45309; }
+    .panel-header .db-name.medrxiv  { color: #0891b2; }
     .panel-header label { font-size: 0.78rem; color: #64748b; display: flex; align-items: center; gap: 8px; }
     .panel-header input[type=number] { background: #0f1117; border: 1px solid #2d3148; border-radius: 6px; padding: 5px 8px; color: #e2e8f0; font-size: 0.85rem; width: 58px; outline: none; }
     .panel-body { padding: 16px 20px; min-height: 120px; }
@@ -141,6 +143,8 @@ const DBS = [
   { id: "cpdb",     label: "CPDB",         runUrl: "/api/cpdb/run",     pdfDir: "/pdfs/CPDB",        color: "#b45309" },
   { id: "icsc",     label: "ICSC",         runUrl: "/api/icsc/run",     pdfDir: "/pdfs/ICSC",        color: "#059669" },
   { id: "medline",  label: "Medline",      runUrl: "/api/medline/run",  pdfDir: "/pdfs/Medline",     color: "#e11d48" },
+  { id: "biorxiv",  label: "bioRxiv",      runUrl: "/api/biorxiv/run",  pdfDir: "/pdfs/Biorxiv",     color: "#b45309" },
+  { id: "medrxiv",  label: "medRxiv",      runUrl: "/api/medrxiv/run",  pdfDir: "/pdfs/Medrxiv",     color: "#0891b2" },
 ];
 
 // Track which DBs are selected (none on by default — user picks)
