@@ -197,38 +197,62 @@ async def _semantic_scholar(
 
 
 # ── PDF strategy C: Europe PMC ────────────────────────────────────────────────
+# Searches by DOI or PMID → prefers europepmc.org?pdf=render (avoids Cloudflare)
 
 async def _europe_pmc(
-    client: httpx.AsyncClient, pmid: str, sem: asyncio.Semaphore
+    client: httpx.AsyncClient,
+    doi: str,
+    pmid: str,
+    sem: asyncio.Semaphore,
 ) -> str:
+    """
+    Search Europe PMC by PMID (primary) or DOI (fallback).
+    Prefer europepmc.org/articles/PMC...?pdf=render — it's a real PDF download
+    and avoids Cloudflare-protected publisher sites.
+    NEVER return ncbi.nlm.nih.gov/pmc/.../pdf/ — it returns 1 KB HTML, not PDF.
+    """
+    queries = []
+    if pmid:
+        queries.append(f"EXT_ID:{pmid} AND SRC:MED")
+    if doi:
+        queries.append(f"DOI:{doi}")
+
     async with sem:
         await asyncio.sleep(0.2)
-        try:
-            r = await client.get(
-                EPMC_API,
-                params={
-                    "query":      f"EXT_ID:{pmid} AND SRC:MED",
-                    "resultType": "core",
-                    "format":     "json",
-                },
-                timeout=TIMEOUT,
-            )
-            if r.status_code == 200:
+        for q in queries:
+            try:
+                r = await client.get(
+                    EPMC_API,
+                    params={"query": q, "resultType": "core", "format": "json"},
+                    timeout=TIMEOUT,
+                )
+                if r.status_code != 200:
+                    continue
                 results = r.json().get("resultList", {}).get("result", [])
-                if results:
-                    paper = results[0]
-                    for entry in (
-                        paper.get("fullTextUrlList", {}).get("fullTextUrl") or []
-                    ):
-                        if entry.get("documentStyle") == "pdf":
-                            url = entry.get("url", "")
-                            if url:
-                                return url
-                    pmcid = paper.get("pmcid", "")
-                    if pmcid:
-                        return f"https://www.ncbi.nlm.nih.gov/pmc/articles/{pmcid}/pdf/"
-        except Exception:
-            pass
+                if not results:
+                    continue
+                paper  = results[0]
+                pmcid  = paper.get("pmcid", "")
+                ft_urls = (
+                    paper.get("fullTextUrlList", {}).get("fullTextUrl") or []
+                )
+                # Prefer europepmc.org?pdf=render — real PDF, no Cloudflare
+                for entry in ft_urls:
+                    if entry.get("documentStyle") == "pdf":
+                        url = entry.get("url", "")
+                        if url and "europepmc.org" in url:
+                            return url
+                # Then try any other pdf URL from the list
+                for entry in ft_urls:
+                    if entry.get("documentStyle") == "pdf":
+                        url = entry.get("url", "")
+                        if url:
+                            return url
+                # Fallback: build europepmc.org URL from PMCID
+                if pmcid:
+                    return f"https://europepmc.org/articles/{pmcid}?pdf=render"
+            except Exception:
+                pass
     return ""
 
 
@@ -251,17 +275,17 @@ async def _resolve_ref(
 
     pdf_url = ""
 
-    # ── Strategy A: Unpaywall (DOI) ───────────────────────────────────────────
-    if doi and not pdf_url:
-        pdf_url = await _unpaywall(client, doi, sem)
+    # ── Strategy A: Europe PMC (DOI or PMID) — most reliable, no Cloudflare ───
+    if (doi or pmid) and not pdf_url:
+        pdf_url = await _europe_pmc(client, doi, pmid, sem)
 
     # ── Strategy B: Semantic Scholar (DOI or PMID) ────────────────────────────
     if not pdf_url and (doi or pmid):
         pdf_url = await _semantic_scholar(client, doi, pmid, sem)
 
-    # ── Strategy C: Europe PMC (PMID) ─────────────────────────────────────────
-    if pmid and not pdf_url:
-        pdf_url = await _europe_pmc(client, pmid, sem)
+    # ── Strategy C: Unpaywall (DOI) ───────────────────────────────────────────
+    if doi and not pdf_url:
+        pdf_url = await _unpaywall(client, doi, sem)
 
     if not pdf_url:
         return None
