@@ -49,6 +49,7 @@ from db import (
     PubMedActivityLog, PubMedPaper, PubMedRun,
     NioshActivityLog, NioshPaper, NioshRun,
     IloActivityLog, IloPaper, IloRun,
+    IarcActivityLog, IarcPaper, IarcRun,
     get_db, init_db,
 )
 from europepmc       import search as _epmc_search,   download_pdf as _epmc_download
@@ -70,6 +71,7 @@ from OECD            import search as _oecd_search, download_pdf as _oecd_downlo
 from PubMed          import search as _pubmed_search, download_pdf as _pubmed_download
 from NIOSH           import search as _niosh_search,  download_pdf as _niosh_download
 from ILO             import search as _ilo_search,    download_pdf as _ilo_download
+from IARC            import search as _iarc_search,   download_pdf as _iarc_download
 
 # ── paths ─────────────────────────────────────────────────────────────────────
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -93,6 +95,7 @@ PDF_DIR_OECD     = PDF_DIR / "OECD"
 PDF_DIR_PUBMED   = PDF_DIR / "PubMed"
 PDF_DIR_NIOSH    = PDF_DIR / "NIOSH"
 PDF_DIR_ILO      = PDF_DIR / "ILO"
+PDF_DIR_IARC     = PDF_DIR / "IARC"
 FRONTEND         = PROJECT_ROOT / "frontend"
 
 for d in (PDF_DIR_EPMC, PDF_DIR_PMC, PDF_DIR_SS,
@@ -100,7 +103,7 @@ for d in (PDF_DIR_EPMC, PDF_DIR_PMC, PDF_DIR_SS,
           PDF_DIR_ATSDR, PDF_DIR_ZENODO, PDF_DIR_CANADA, PDF_DIR_CONCAWE,
           PDF_DIR_SAFEWORK, PDF_DIR_OPENALEX,
           PDF_DIR_EFSA, PDF_DIR_NITE, PDF_DIR_OECD, PDF_DIR_PUBMED,
-          PDF_DIR_NIOSH, PDF_DIR_ILO):
+          PDF_DIR_NIOSH, PDF_DIR_ILO, PDF_DIR_IARC):
     d.mkdir(parents=True, exist_ok=True)
 
 
@@ -133,6 +136,7 @@ app.mount("/pdfs/OECD",            StaticFiles(directory=str(PDF_DIR_OECD)),    
 app.mount("/pdfs/PubMed",          StaticFiles(directory=str(PDF_DIR_PUBMED)),   name="pdfs_pubmed")
 app.mount("/pdfs/NIOSH",           StaticFiles(directory=str(PDF_DIR_NIOSH)),    name="pdfs_niosh")
 app.mount("/pdfs/ILO",             StaticFiles(directory=str(PDF_DIR_ILO)),      name="pdfs_ilo")
+app.mount("/pdfs/IARC",            StaticFiles(directory=str(PDF_DIR_IARC)),     name="pdfs_iarc")
 if FRONTEND.exists():
     app.mount("/static", StaticFiles(directory=str(FRONTEND)), name="static")
 
@@ -244,6 +248,9 @@ async def _niosh_dl(p: dict, d: Path) -> dict:
 async def _ilo_dl(p: dict, d: Path) -> dict:
     return await _ilo_download("doc", "noid", p["pdf_urls"], d)
 
+async def _iarc_dl(p: dict, d: Path) -> dict:
+    return await _iarc_download("doc", "noid", p["pdf_urls"], d)
+
 
 EPMC   = _DbDriver("RUN_",    PDF_DIR_EPMC,   _epmc_search,   _epmc_dl,
                    Run, Paper, ActivityLog, _epmc_extras)
@@ -283,6 +290,8 @@ NIOSH  = _DbDriver("NIOSH_", PDF_DIR_NIOSH,  _niosh_search,  _niosh_dl,
                    NioshRun, NioshPaper, NioshActivityLog, _epmc_extras)
 ILO    = _DbDriver("ILO_",   PDF_DIR_ILO,    _ilo_search,    _ilo_dl,
                    IloRun, IloPaper, IloActivityLog, _epmc_extras)
+IARC   = _DbDriver("IARC_",  PDF_DIR_IARC,   _iarc_search,   _iarc_dl,
+                   IarcRun, IarcPaper, IarcActivityLog, _epmc_extras)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -588,6 +597,10 @@ async def run_niosh(req: RunRequest, db: AsyncSession = Depends(get_db)):
 async def run_ilo(req: RunRequest, db: AsyncSession = Depends(get_db)):
     return await _run_pipeline(ILO, req, db)
 
+@app.post("/api/iarc/run")
+async def run_iarc(req: RunRequest, db: AsyncSession = Depends(get_db)):
+    return await _run_pipeline(IARC, req, db)
+
 
 # ── runs listings (one shared dict shape) ─────────────────────────────────────
 @app.get("/api/runs")
@@ -665,6 +678,10 @@ async def list_runs_niosh(db: AsyncSession = Depends(get_db)):
 @app.get("/api/ilo/runs")
 async def list_runs_ilo(db: AsyncSession = Depends(get_db)):
     return await _list_runs(db, IloRun)
+
+@app.get("/api/iarc/runs")
+async def list_runs_iarc(db: AsyncSession = Depends(get_db)):
+    return await _list_runs(db, IarcRun)
 
 
 async def _list_runs(db: AsyncSession, model) -> list[dict]:

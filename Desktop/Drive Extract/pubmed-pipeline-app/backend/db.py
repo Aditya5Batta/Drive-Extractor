@@ -520,6 +520,10 @@ IloRun         = _make_run_class  ("IloRun",         "ilo_runs")
 IloPaper       = _make_paper_class("IloPaper",       "ilo_papers",       "ilo_runs")
 IloActivityLog = _make_log_class  ("IloActivityLog", "ilo_activity_logs", "ilo_runs")
 
+IarcRun         = _make_run_class  ("IarcRun",         "iarc_runs")
+IarcPaper       = _make_paper_class("IarcPaper",       "iarc_papers",       "iarc_runs")
+IarcActivityLog = _make_log_class  ("IarcActivityLog", "iarc_activity_logs", "iarc_runs")
+
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 async def get_db():
