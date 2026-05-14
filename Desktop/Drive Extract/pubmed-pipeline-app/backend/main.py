@@ -443,6 +443,28 @@ async def _run_pipeline(d: _DbDriver, req: RunRequest, db: AsyncSession) -> dict
             response_time_ms=sr["response_time_ms"],
         ))
         papers = sr["papers"]
+
+        # Deduplicate by pmcid > pmid > doi — keep first (highest-relevance) occurrence.
+        # EuropePMC (and some other APIs) can return the same article twice under
+        # different index records (e.g. preprint + published). We prefer the entry
+        # that comes first because it has the highest relevance score.
+        _seen_pmc: set[str] = set()
+        _seen_pm:  set[str] = set()
+        _seen_doi: set[str] = set()
+        _deduped: list[dict] = []
+        for p in papers:
+            _pmcid = (p.get("pmcid") or "").strip()
+            _pmid  = (p.get("pmid")  or "").strip()
+            _doi   = (p.get("doi")   or "").lower().strip()
+            if _pmcid and _pmcid in _seen_pmc: continue
+            if _pmid  and _pmid  in _seen_pm:  continue
+            if _doi   and _doi   in _seen_doi: continue
+            _deduped.append(p)
+            if _pmcid: _seen_pmc.add(_pmcid)
+            if _pmid:  _seen_pm.add(_pmid)
+            if _doi:   _seen_doi.add(_doi)
+        papers = _deduped
+
         run.papers_found = len(papers)
         await db.flush()
 
@@ -838,14 +860,12 @@ async def health(db: AsyncSession = Depends(get_db)):
 # ══════════════════════════════════════════════════════════════════════════════
 def _build_response(run_id, chemical, run, papers_out, ok, fail, skip, no_url=0,
                     max_results: int | None = None):
-    # Return papers in original search-result order (result_position ascending).
-    # Failed/no_url papers are kept so the UI shows the source's exact ranking;
-    # the frontend renders missing PDFs gracefully (title + View/DOI links).
-    # Cap to max_results so the response matches what the user requested,
-    # not the over-fetched candidate pool.
-    ordered = sorted(papers_out, key=lambda p: p.get("result_position", 0))
-    if max_results:
-        ordered = ordered[:max_results]
+    # Dashboard shows only successfully saved PDFs — everything else is in Postgres.
+    # Sort by original relevance position so the list matches search ranking.
+    saved_papers = sorted(
+        [p for p in papers_out if p.get("pdf_status") == "success"],
+        key=lambda p: p.get("result_position", 0),
+    )
     return {
         "run_id":   run_id,
         "chemical": chemical,
@@ -857,7 +877,7 @@ def _build_response(run_id, chemical, run, papers_out, ok, fail, skip, no_url=0,
             "started_at":   str(run.started_at),
             "finished_at":  str(run.finished_at),
         },
-        "papers": ordered,
+        "papers": saved_papers,
     }
 
 
